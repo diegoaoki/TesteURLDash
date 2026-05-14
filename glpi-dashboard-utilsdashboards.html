@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Dashboard · GLPI utilsdashboards</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1620; --panel: #182230; --panel-2: #1f2b3d; --border: #2a3a52;
+    --text: #e6edf6; --text-dim: #8b9bb4; --accent: #4cc9f0; --accent-2: #f72585;
+    --ok: #06d6a0; --warn: #ffd166; --bad: #ef476f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; min-height: 100vh; }
+  header { padding: 18px 28px; background: linear-gradient(180deg, #1a2740 0%, #131c2c 100%); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  h1 .accent { color: var(--accent); }
+  .badge { font-size: 11px; padding: 3px 10px; border-radius: 10px; background: var(--panel-2); color: var(--text-dim); border: 1px solid var(--border); }
+  main { padding: 22px 28px 60px; max-width: 1500px; margin: 0 auto; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 18px; }
+  .card h2 { margin: 0 0 14px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); }
+
+  .controls { display: flex; gap: 10px; align-items: center; }
+  .controls input { flex: 1; padding: 11px 14px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 13px; font-family: ui-monospace, monospace; outline: none; }
+  .controls input:focus { border-color: var(--accent); }
+  button { padding: 11px 22px; background: var(--accent); color: #062033; border: 0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  button:hover:not(:disabled) { filter: brightness(1.1); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .status { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; display: none; }
+  .status.ok { display: block; background: rgba(6,214,160,0.1); border-left: 3px solid var(--ok); color: #a7f3d0; }
+  .status.err { display: block; background: rgba(239,71,111,0.1); border-left: 3px solid var(--bad); color: #ffb3c1; }
+  .status.loading { display: block; background: rgba(255,209,102,0.1); border-left: 3px solid var(--warn); color: #fde68a; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; position: relative; overflow: hidden; }
+  .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--accent); opacity: .6; }
+  .kpi.ok::before { background: var(--ok); }
+  .kpi.warn::before { background: var(--warn); }
+  .kpi.bad::before { background: var(--bad); }
+  .kpi h3 { margin: 0 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); font-weight: 500; }
+  .kpi .val { font-size: 26px; font-weight: 700; line-height: 1.1; }
+  .kpi .sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 18px; }
+  .grid.two { grid-template-columns: repeat(2, 1fr); }
+  @media (max-width: 900px) { .grid, .grid.two { grid-template-columns: 1fr; } }
+  .chart-wrap { position: relative; height: 260px; }
+  .chart-wrap.tall { height: 340px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table th { text-align: left; padding: 8px 10px; color: var(--text-dim); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+  table td { padding: 7px 10px; border-bottom: 1px solid var(--panel-2); }
+  table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  table tr:hover td { background: var(--panel-2); }
+
+  .scroll-y { max-height: 360px; overflow-y: auto; border-radius: 6px; }
+
+  .search-row { display: flex; gap: 10px; margin-bottom: 10px; }
+  .search-row input, .search-row select { padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 13px; outline: none; }
+  .search-row input { flex: 1; }
+  .pill { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; background: var(--panel-2); border: 1px solid var(--border); white-space: nowrap; }
+  .pill.s1 { background: rgba(76,201,240,0.15); color: #4cc9f0; }
+  .pill.s2 { background: rgba(255,209,102,0.15); color: #ffd166; }
+  .pill.s3 { background: rgba(160,108,213,0.15); color: #c8a6e8; }
+  .pill.s4 { background: rgba(247,37,133,0.15); color: #f72585; }
+  .pill.s5 { background: rgba(6,214,160,0.15); color: #06d6a0; }
+  .pill.s6 { background: rgba(120,140,170,0.15); color: #a4b3c9; }
+
+  .empty { text-align: center; padding: 50px 20px; color: var(--text-dim); }
+  .empty h2 { color: var(--text-dim); font-size: 16px; margin: 0 0 10px; }
+
+  .help { font-size: 12px; color: var(--text-dim); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Dashboard <span class="accent">utilsdashboards</span></h1>
+  <span class="badge" id="dashName">—</span>
+</header>
+
+<main>
+
+  <div class="card">
+    <h2>Endpoint</h2>
+    <div class="controls">
+      <input type="text" id="endpoint" placeholder="https://avenida.verdanadesk.com/plugins/utilsdashboards/front/ajax/graphic.json.php?token=..." value="https://avenida.verdanadesk.com/plugins/utilsdashboards/front/ajax/graphic.json.php?token=c975e02d9be93be2df481f5891413e33">
+      <button id="btnLoad">Carregar</button>
+    </div>
+    <div class="help">Cole a URL completa do endpoint público do dashboard.</div>
+  </div>
+
+  <div id="status" class="status"></div>
+
+  <div id="empty" class="empty">
+    <h2>Aguardando dados</h2>
+    <p>Cole a URL do dashboard e clique em "Carregar".</p>
+  </div>
+
+  <div id="results" style="display:none;">
+
+    <div class="kpis">
+      <div class="kpi"><h3>Total de tickets</h3><div class="val" id="kTotal">—</div><div class="sub" id="kTotalSub"></div></div>
+      <div class="kpi ok"><h3>Fechados / Solucionados</h3><div class="val" id="kClosed">—</div><div class="sub" id="kClosedSub"></div></div>
+      <div class="kpi warn"><h3>Em aberto</h3><div class="val" id="kOpen">—</div><div class="sub" id="kOpenSub"></div></div>
+      <div class="kpi"><h3>1º atendimento médio</h3><div class="val" id="kTta">—</div><div class="sub">abertura → 1º toque</div></div>
+      <div class="kpi"><h3>Tempo médio resolução</h3><div class="val" id="kTtr">—</div><div class="sub">abertura → solução</div></div>
+      <div class="kpi"><h3>Duplicatas removidas</h3><div class="val" id="kDup">—</div><div class="sub">registros idênticos</div></div>
+    </div>
+
+    <div class="grid">
+      <div class="card"><h2>Status</h2><div class="chart-wrap"><canvas id="chStatus"></canvas></div></div>
+      <div class="card"><h2>Origem da requisição</h2><div class="chart-wrap"><canvas id="chType"></canvas></div></div>
+      <div class="card"><h2>Faixas de tempo de resolução</h2><div class="chart-wrap"><canvas id="chTtrBucket"></canvas></div></div>
+    </div>
+
+    <div class="card">
+      <h2>Linha do tempo · aberturas por dia</h2>
+      <div class="chart-wrap tall"><canvas id="chTimeline"></canvas></div>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <h2>Top 15 · Requerentes (USERS_ID_RECIPIENT)</h2>
+        <div class="scroll-y">
+          <table id="tblRecipient">
+            <thead><tr><th>User ID</th><th class="num">Total</th><th class="num">Fechados</th><th class="num">Abertos</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Top 15 · Últimos atualizadores (USERS_ID_LASTUPDATER)</h2>
+        <div class="scroll-y">
+          <table id="tblUpdater">
+            <thead><tr><th>User ID</th><th class="num">Tickets</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Tickets <span id="tblCount" style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;"></span></h2>
+      <div class="search-row">
+        <input type="text" id="tblSearch" placeholder="Buscar por título, ID ou user ID...">
+        <select id="tblStatus">
+          <option value="">Todos os status</option>
+          <option value="1">1 · Novo</option>
+          <option value="2">2 · Em atendimento (atribuído)</option>
+          <option value="3">3 · Em atendimento (planejado)</option>
+          <option value="4">4 · Pendente</option>
+          <option value="5">5 · Solucionado</option>
+          <option value="6">6 · Fechado</option>
+        </select>
+        <select id="tblSort">
+          <option value="date_desc">Abertura ↓ (mais recente)</option>
+          <option value="date_asc">Abertura ↑ (mais antigo)</option>
+          <option value="ttr_desc">Maior tempo de resolução</option>
+          <option value="ttr_asc">Menor tempo de resolução</option>
+        </select>
+      </div>
+      <div class="scroll-y" style="max-height: 500px;">
+        <table id="tblTickets">
+          <thead><tr>
+            <th>ID</th><th>Título</th><th>Status</th>
+            <th>Abertura</th><th>1º Toque</th><th>Solução</th><th>Fechamento</th>
+            <th class="num">TTA</th><th class="num">TTR</th>
+            <th class="num">Req.</th><th class="num">Atu.</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+<script>
+const STATUS_NAMES = {
+  1: 'Novo', 2: 'Em atend. (atribuído)', 3: 'Em atend. (planejado)',
+  4: 'Pendente', 5: 'Solucionado', 6: 'Fechado'
+};
+const REQUEST_TYPES = {
+  1: 'Helpdesk', 2: 'E-mail', 3: 'Telefone', 4: 'Outro',
+  5: 'Escrito', 6: 'Direto', 7: 'Formulário'
+};
+const COLORS = ['#4cc9f0', '#f72585', '#06d6a0', '#ffd166', '#ef476f', '#a06cd5', '#ff9e00', '#90e0ef', '#b5179e', '#80ed99', '#fdc500', '#48bfe3'];
+Chart.defaults.color = '#8b9bb4';
+Chart.defaults.borderColor = '#2a3a52';
+
+const $status = document.getElementById('status');
+const $empty = document.getElementById('empty');
+const $results = document.getElementById('results');
+const $endpoint = document.getElementById('endpoint');
+const $dashName = document.getElementById('dashName');
+let charts = {};
+let allTickets = [];
+
+function setStatus(msg, kind) {
+  $status.className = 'status ' + kind;
+  $status.textContent = msg;
+}
+function destroyCharts() {
+  Object.values(charts).forEach(c => c && c.destroy());
+  charts = {};
+}
+
+document.getElementById('btnLoad').addEventListener('click', async () => {
+  const url = $endpoint.value.trim();
+  if (!url) { setStatus('Informe a URL.', 'err'); return; }
+
+  setStatus('Buscando dados...', 'loading');
+  document.getElementById('btnLoad').disabled = true;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if (json.Warning) {
+      setStatus('Aviso do servidor: ' + json.Warning, 'err');
+      return;
+    }
+    processData(json);
+  } catch (err) {
+    setStatus('Erro: ' + err.message + ' — se for CORS, hospede esta página no mesmo domínio do GLPI ou use uma extensão de CORS para teste.', 'err');
+  } finally {
+    document.getElementById('btnLoad').disabled = false;
+  }
+});
+
+function processData(json) {
+  if (!json || !Array.isArray(json.data)) {
+    setStatus('Formato inesperado: esperava { data: [...] }.', 'err');
+    return;
+  }
+  $dashName.textContent = json.name || '(sem nome)';
+
+  // Deduplicar — chave por todos os campos relevantes
+  const seen = new Set();
+  const tickets = [];
+  let dupes = 0;
+  for (const t of json.data) {
+    const key = [t.ID, t.DATE, t.STATUS, t.USERS_ID_RECIPIENT, t.USERS_ID_LASTUPDATER].join('|');
+    if (seen.has(key)) { dupes++; continue; }
+    seen.add(key);
+    tickets.push(t);
+  }
+
+  allTickets = tickets;
+  document.getElementById('kDup').textContent = dupes.toLocaleString('pt-BR');
+  renderAll(tickets);
+  $empty.style.display = 'none';
+  $results.style.display = 'block';
+  setStatus('✓ ' + tickets.length + ' tickets analisados', 'ok');
+}
+
+function parseDate(s) {
+  if (!s) return null;
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if (!m) return null;
+  return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]);
+}
+function diffHours(a, b) {
+  if (!a || !b) return null;
+  const h = (b - a) / 3600000;
+  return h < 0 ? null : h;
+}
+function formatDuration(h) {
+  if (h === null || h === undefined || isNaN(h)) return '—';
+  if (h < 1) return Math.round(h * 60) + ' min';
+  if (h < 24) return h.toFixed(1) + 'h';
+  return (h / 24).toFixed(1) + 'd';
+}
+function isOpen(status) {
+  return ![5, 6].includes(Number(status));
+}
+
+function renderAll(tickets) {
+  destroyCharts();
+
+  const total = tickets.length;
+  const closed = tickets.filter(t => !isOpen(t.STATUS)).length;
+  const open = total - closed;
+
+  // Tempos
+  const ttas = [], ttrs = [];
+  tickets.forEach(t => {
+    const open = parseDate(t.DATE);
+    const first = parseDate(t.TAKEINTOACCOUNTDATE);
+    const solved = parseDate(t.SOLVEDATE);
+    const tta = diffHours(open, first);
+    const ttr = diffHours(open, solved);
+    if (tta !== null) ttas.push(tta);
+    if (ttr !== null) ttrs.push(ttr);
+  });
+  const avg = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
+
+  document.getElementById('kTotal').textContent = total.toLocaleString('pt-BR');
+  const minDate = tickets.map(t => parseDate(t.DATE)).filter(d => d).sort((a,b) => a-b)[0];
+  const maxDate = tickets.map(t => parseDate(t.DATE)).filter(d => d).sort((a,b) => b-a)[0];
+  document.getElementById('kTotalSub').textContent = minDate && maxDate
+    ? minDate.toLocaleDateString('pt-BR') + ' → ' + maxDate.toLocaleDateString('pt-BR') : '';
+  document.getElementById('kClosed').textContent = closed.toLocaleString('pt-BR');
+  document.getElementById('kClosedSub').textContent = total ? (closed/total*100).toFixed(1) + '%' : '';
+  document.getElementById('kOpen').textContent = open.toLocaleString('pt-BR');
+  document.getElementById('kOpenSub').textContent = total ? (open/total*100).toFixed(1) + '%' : '';
+  document.getElementById('kTta').textContent = formatDuration(avg(ttas));
+  document.getElementById('kTtr').textContent = formatDuration(avg(ttrs));
+
+  // Status chart
+  const byStatus = {};
+  tickets.forEach(t => {
+    const label = STATUS_NAMES[t.STATUS] || ('Status ' + t.STATUS);
+    byStatus[label] = (byStatus[label] || 0) + 1;
+  });
+  charts.status = makeDoughnut('chStatus', byStatus);
+
+  // Type chart
+  const byType = {};
+  tickets.forEach(t => {
+    const label = REQUEST_TYPES[t.REQUESTTYPES_ID] || ('Tipo ' + t.REQUESTTYPES_ID);
+    byType[label] = (byType[label] || 0) + 1;
+  });
+  charts.type = makeDoughnut('chType', byType);
+
+  // TTR buckets
+  const buckets = {
+    '< 1h': 0, '1-4h': 0, '4-24h': 0, '1-3d': 0, '3-7d': 0, '> 7d': 0
+  };
+  ttrs.forEach(h => {
+    if (h < 1) buckets['< 1h']++;
+    else if (h < 4) buckets['1-4h']++;
+    else if (h < 24) buckets['4-24h']++;
+    else if (h < 72) buckets['1-3d']++;
+    else if (h < 168) buckets['3-7d']++;
+    else buckets['> 7d']++;
+  });
+  charts.ttrBucket = new Chart(document.getElementById('chTtrBucket'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(buckets),
+      datasets: [{ data: Object.values(buckets), backgroundColor: COLORS, borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } }
+    }
+  });
+
+  // Timeline
+  const byDay = {};
+  tickets.forEach(t => {
+    const d = parseDate(t.DATE);
+    if (!d) return;
+    const k = d.toISOString().slice(0, 10);
+    byDay[k] = (byDay[k] || 0) + 1;
+  });
+  const days = Object.keys(byDay).sort();
+  charts.timeline = new Chart(document.getElementById('chTimeline'), {
+    type: 'line',
+    data: {
+      labels: days,
+      datasets: [{
+        label: 'Aberturas', data: days.map(d => byDay[d]),
+        borderColor: '#4cc9f0', backgroundColor: 'rgba(76,201,240,0.15)',
+        tension: 0.25, fill: true, pointRadius: 2
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 20 } }, y: { beginAtZero: true } }
+    }
+  });
+
+  // Top recipient
+  const recipMap = {};
+  tickets.forEach(t => {
+    const id = t.USERS_ID_RECIPIENT;
+    if (!id) return;
+    if (!recipMap[id]) recipMap[id] = { total: 0, closed: 0 };
+    recipMap[id].total++;
+    if (!isOpen(t.STATUS)) recipMap[id].closed++;
+  });
+  const topRecip = Object.entries(recipMap).sort((a,b) => b[1].total - a[1].total).slice(0, 15);
+  document.querySelector('#tblRecipient tbody').innerHTML = topRecip.map(([id, v]) => `
+    <tr><td>${id}</td><td class="num">${v.total}</td><td class="num">${v.closed}</td><td class="num">${v.total - v.closed}</td></tr>
+  `).join('');
+
+  // Top updater
+  const updMap = {};
+  tickets.forEach(t => {
+    const id = t.USERS_ID_LASTUPDATER;
+    if (!id) return;
+    updMap[id] = (updMap[id] || 0) + 1;
+  });
+  const topUpd = Object.entries(updMap).sort((a,b) => b[1] - a[1]).slice(0, 15);
+  document.querySelector('#tblUpdater tbody').innerHTML = topUpd.map(([id, v]) => `
+    <tr><td>${id}</td><td class="num">${v}</td></tr>
+  `).join('');
+
+  renderTable();
+}
+
+function renderTable() {
+  const q = document.getElementById('tblSearch').value.trim().toLowerCase();
+  const status = document.getElementById('tblStatus').value;
+  const sort = document.getElementById('tblSort').value;
+
+  let filtered = allTickets.filter(t => {
+    if (status && String(t.STATUS) !== status) return false;
+    if (q) {
+      const hay = [t.ID, t.NAME, t.USERS_ID_RECIPIENT, t.USERS_ID_LASTUPDATER].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Enriquece com TTR/TTA
+  filtered = filtered.map(t => {
+    const dOpen = parseDate(t.DATE);
+    const dFirst = parseDate(t.TAKEINTOACCOUNTDATE);
+    const dSolved = parseDate(t.SOLVEDATE);
+    const dClosed = parseDate(t.CLOSEDATE);
+    return {
+      ...t,
+      _dateOpen: dOpen,
+      _tta: diffHours(dOpen, dFirst),
+      _ttr: diffHours(dOpen, dSolved),
+      _dateClosed: dClosed,
+      _dateSolved: dSolved,
+      _dateFirst: dFirst,
+    };
+  });
+
+  filtered.sort((a, b) => {
+    if (sort === 'date_desc') return (b._dateOpen || 0) - (a._dateOpen || 0);
+    if (sort === 'date_asc')  return (a._dateOpen || 0) - (b._dateOpen || 0);
+    if (sort === 'ttr_desc')  return (b._ttr || -1) - (a._ttr || -1);
+    if (sort === 'ttr_asc')   return (a._ttr === null ? Infinity : a._ttr) - (b._ttr === null ? Infinity : b._ttr);
+    return 0;
+  });
+
+  document.getElementById('tblCount').textContent = '· ' + filtered.length + ' de ' + allTickets.length;
+
+  const tbody = document.querySelector('#tblTickets tbody');
+  const max = 500; // limita pra não travar
+  const slice = filtered.slice(0, max);
+  tbody.innerHTML = slice.map(t => `
+    <tr>
+      <td>${t.ID}</td>
+      <td>${escapeHtml(t.NAME || '')}</td>
+      <td><span class="pill s${t.STATUS}">${STATUS_NAMES[t.STATUS] || t.STATUS}</span></td>
+      <td>${formatDateShort(t._dateOpen)}</td>
+      <td>${formatDateShort(t._dateFirst)}</td>
+      <td>${formatDateShort(t._dateSolved)}</td>
+      <td>${formatDateShort(t._dateClosed)}</td>
+      <td class="num">${formatDuration(t._tta)}</td>
+      <td class="num">${formatDuration(t._ttr)}</td>
+      <td class="num">${t.USERS_ID_RECIPIENT || '—'}</td>
+      <td class="num">${t.USERS_ID_LASTUPDATER || '—'}</td>
+    </tr>
+  `).join('');
+
+  if (filtered.length > max) {
+    tbody.innerHTML += `<tr><td colspan="11" style="text-align:center; color: var(--text-dim); padding: 12px;">+ ${filtered.length - max} linhas ocultas (refine a busca)</td></tr>`;
+  }
+}
+
+function makeDoughnut(canvasId, dataObj, palette) {
+  const labels = Object.keys(dataObj);
+  const values = Object.values(dataObj);
+  return new Chart(document.getElementById(canvasId), {
+    type: 'doughnut',
+    data: { labels, datasets: [{
+      data: values,
+      backgroundColor: palette || labels.map((_, i) => COLORS[i % COLORS.length]),
+      borderWidth: 2, borderColor: '#182230'
+    }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } } }
+    }
+  });
+}
+
+function formatDateShort(d) {
+  if (!d) return '—';
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('tblSearch').addEventListener('input', () => { if (allTickets.length) renderTable(); });
+document.getElementById('tblStatus').addEventListener('change', () => { if (allTickets.length) renderTable(); });
+document.getElementById('tblSort').addEventListener('change', () => { if (allTickets.length) renderTable(); });
+</script>
+
+</body>
+</html>
