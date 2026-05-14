@@ -136,6 +136,8 @@
 
     <div class="kpis">
       <div class="kpi"><h3>Total de tickets</h3><div class="val" id="kTotal">—</div><div class="sub" id="kTotalSub"></div></div>
+      <div class="kpi warn"><h3>Em atendimento agora</h3><div class="val" id="kInProgress">—</div><div class="sub" id="kInProgressSub"></div></div>
+      <div class="kpi ok"><h3>% atendidos hoje</h3><div class="val" id="kTodayPct">—</div><div class="sub" id="kTodaySub"></div></div>
       <div class="kpi ok"><h3>Fechados / Solucionados</h3><div class="val" id="kClosed">—</div><div class="sub" id="kClosedSub"></div></div>
       <div class="kpi warn"><h3>Em aberto</h3><div class="val" id="kOpen">—</div><div class="sub" id="kOpenSub"></div></div>
       <div class="kpi"><h3>1º atendimento médio</h3><div class="val" id="kTta">—</div><div class="sub">abertura → 1º toque</div></div>
@@ -398,6 +400,17 @@ function renderAll(tickets) {
   const total = tickets.length;
   const closed = tickets.filter(t => !isOpen(t.STATUS)).length;
   const open = total - closed;
+  const inProgress = tickets.filter(t => [2, 3].includes(Number(t.STATUS))).length;
+
+  // Chamados abertos hoje (DATE >= 00:00 de hoje)
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const openedToday = tickets.filter(t => {
+    const d = parseDate(t.DATE);
+    return d && d >= today;
+  });
+  const openedTodayCount = openedToday.length;
+  const attendedToday = openedToday.filter(t => !isOpen(t.STATUS) || parseDate(t.TAKEINTOACCOUNTDATE)).length;
+  const todayPct = openedTodayCount ? (attendedToday / openedTodayCount * 100) : null;
 
   // Tempos
   const ttas = [], ttrs = [];
@@ -419,6 +432,12 @@ function renderAll(tickets) {
     ? minDate.toLocaleDateString('pt-BR') + ' → ' + maxDate.toLocaleDateString('pt-BR') : '';
   document.getElementById('kClosed').textContent = closed.toLocaleString('pt-BR');
   document.getElementById('kClosedSub').textContent = total ? (closed/total*100).toFixed(1) + '%' : '';
+  document.getElementById('kInProgress').textContent = inProgress.toLocaleString('pt-BR');
+  document.getElementById('kInProgressSub').textContent = total ? (inProgress/total*100).toFixed(1) + '% do total' : '';
+  document.getElementById('kTodayPct').textContent = todayPct === null ? '—' : todayPct.toFixed(1) + '%';
+  document.getElementById('kTodaySub').textContent = openedTodayCount
+    ? attendedToday + ' de ' + openedTodayCount + ' chamados de hoje'
+    : 'sem chamados hoje';
   document.getElementById('kOpen').textContent = open.toLocaleString('pt-BR');
   document.getElementById('kOpenSub').textContent = total ? (open/total*100).toFixed(1) + '%' : '';
   document.getElementById('kTta').textContent = formatDuration(avg(ttas));
