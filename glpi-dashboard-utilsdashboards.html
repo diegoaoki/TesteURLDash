@@ -97,6 +97,26 @@
   .search-row input { flex: 1; min-width: 200px; }
 
   .stars { color: #ffd166; letter-spacing: 1px; }
+
+  a.ticket-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    padding: 1px 4px;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+  }
+  a.ticket-link:hover {
+    background: rgba(76, 201, 240, 0.15);
+    color: #7dd6f5;
+    text-decoration: underline;
+  }
+  a.ticket-link::before {
+    content: '#';
+    opacity: 0.6;
+    margin-right: 1px;
+  }
 </style>
 </head>
 <body>
@@ -314,6 +334,7 @@
 // CONFIG - URLs dos endpoints (via proxy /api/glpi quando necessário)
 // ============================================================================
 const HOST = 'https://avenida.verdanadesk.com';
+const TICKET_URL = id => `${HOST}/front/ticket.form.php?id=${id}`;
 const TOKENS = {
   Q01_GRUPOS:     'c412f6f2a39b4bd8f2ace68dc3823bee',
   Q02B_TICKETS:   '80088ccf0b77cd545d5c315b39d307be',
@@ -898,7 +919,7 @@ function renderReopenTable(tickets) {
   }
   $('tblReopen').innerHTML = rows.map(({ t, r }) => `
     <tr>
-      <td>${t.id}</td>
+      <td><a class="ticket-link" href="${TICKET_URL(t.id)}" target="_blank" rel="noopener" title="Abrir no GLPI">${t.id}</a></td>
       <td title="${escapeHtml(t.titulo)}">${escapeHtml((t.titulo || '').slice(0, 50))}</td>
       <td class="num"><strong style="color: var(--bad)">${r.qtd_reaberturas}</strong></td>
       <td>${formatDateOnly(parseDate(r.ultima_reabertura))}</td>
@@ -950,7 +971,7 @@ function renderPendingTable(tickets, tecnicos, requerentes) {
   const max = 200;
   $('tblPending').innerHTML = rows.slice(0, max).map(t => `
     <tr>
-      <td>${t.id}</td>
+      <td><a class="ticket-link" href="${TICKET_URL(t.id)}" target="_blank" rel="noopener" title="Abrir no GLPI">${t.id}</a></td>
       <td title="${escapeHtml(t.titulo)}">${escapeHtml((t.titulo || '').slice(0, 60))}</td>
       <td><span class="pill s${t.status}">${STATUS_NAMES[t.status] || t.status}</span></td>
       <td class="num">${t.dias_aberto}</td>
@@ -1021,7 +1042,7 @@ function renderTicketsTable(tickets, tecnicos, requerentes) {
 
   $('tblTickets').innerHTML = rows.slice(0, max).map(r => `
     <tr>
-      <td>${r.id}</td>
+      <td><a class="ticket-link" href="${TICKET_URL(r.id)}" target="_blank" rel="noopener" title="Abrir no GLPI">${r.id}</a></td>
       <td title="${escapeHtml(r.titulo)}">${escapeHtml((r.titulo || '').slice(0, 50))}</td>
       <td><span class="pill s${r.status}">${STATUS_NAMES[r.status] || r.status}</span></td>
       <td>${slaPill(r._sla)}</td>
