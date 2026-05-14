@@ -73,6 +73,35 @@
   .empty h2 { color: var(--text-dim); font-size: 16px; margin: 0 0 10px; }
 
   .help { font-size: 12px; color: var(--text-dim); margin-top: 10px; }
+
+  .refresh-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 16px; margin-bottom: 18px; font-size: 12px;
+  }
+  .refresh-info { display: flex; align-items: center; gap: 10px; color: var(--text-dim); }
+  .refresh-info strong { color: var(--text); font-weight: 600; }
+  .refresh-ago { color: var(--text-dim); font-size: 11px; padding-left: 8px; border-left: 1px solid var(--border); }
+  .refresh-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--ok);
+    box-shadow: 0 0 0 0 rgba(6,214,160,0.5);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(6,214,160,0.6); }
+    70% { box-shadow: 0 0 0 8px rgba(6,214,160,0); }
+    100% { box-shadow: 0 0 0 0 rgba(6,214,160,0); }
+  }
+  .refresh-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 12px; font-weight: 500; cursor: pointer;
+  }
+  .refresh-btn:hover:not(:disabled) { background: var(--border); }
+  .refresh-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -101,6 +130,18 @@
   </div>
 
   <div id="results" style="display:none;">
+
+    <div class="refresh-bar">
+      <div class="refresh-info">
+        <span class="refresh-dot"></span>
+        <span>Última atualização: <strong id="lastUpdate">—</strong></span>
+        <span class="refresh-ago" id="updateAgo"></span>
+      </div>
+      <button class="refresh-btn" id="btnReload" title="Recarregar dados">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+        Atualizar
+      </button>
+    </div>
 
     <div class="kpis">
       <div class="kpi"><h3>Total de tickets</h3><div class="val" id="kTotal">—</div><div class="sub" id="kTotalSub"></div></div>
@@ -198,8 +239,12 @@ const $empty = document.getElementById('empty');
 const $results = document.getElementById('results');
 const $endpoint = document.getElementById('endpoint');
 const $dashName = document.getElementById('dashName');
+const $lastUpdate = document.getElementById('lastUpdate');
+const $updateAgo = document.getElementById('updateAgo');
+const $btnReload = document.getElementById('btnReload');
 let charts = {};
 let allTickets = [];
+let lastUpdateTime = null;
 
 function setStatus(msg, kind) {
   $status.className = 'status ' + kind;
@@ -210,14 +255,34 @@ function destroyCharts() {
   charts = {};
 }
 
-document.getElementById('btnLoad').addEventListener('click', async () => {
+function formatUpdateTime(d) {
+  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR');
+}
+function formatAgo(d) {
+  const s = Math.floor((Date.now() - d) / 1000);
+  if (s < 5) return 'agora mesmo';
+  if (s < 60) return 'há ' + s + 's';
+  if (s < 3600) return 'há ' + Math.floor(s/60) + ' min';
+  if (s < 86400) return 'há ' + Math.floor(s/3600) + 'h';
+  return 'há ' + Math.floor(s/86400) + 'd';
+}
+function updateAgoLabel() {
+  if (!lastUpdateTime) return;
+  $updateAgo.textContent = formatAgo(lastUpdateTime);
+}
+setInterval(updateAgoLabel, 10000); // atualiza o "há X" a cada 10s
+
+async function doLoad() {
   const url = $endpoint.value.trim();
   if (!url) { setStatus('Informe a URL.', 'err'); return; }
 
   setStatus('Buscando dados...', 'loading');
   document.getElementById('btnLoad').disabled = true;
+  $btnReload.disabled = true;
+  $btnReload.classList.add('spinning');
   try {
-    const res = await fetch(url);
+    const fetchUrl = buildFetchUrl(url);
+    const res = await fetch(fetchUrl);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
     if (json.Warning) {
@@ -225,12 +290,33 @@ document.getElementById('btnLoad').addEventListener('click', async () => {
       return;
     }
     processData(json);
+    lastUpdateTime = new Date();
+    $lastUpdate.textContent = formatUpdateTime(lastUpdateTime);
+    updateAgoLabel();
   } catch (err) {
     setStatus('Erro: ' + err.message + ' — se for CORS, hospede esta página no mesmo domínio do GLPI ou use uma extensão de CORS para teste.', 'err');
   } finally {
     document.getElementById('btnLoad').disabled = false;
+    $btnReload.disabled = false;
+    $btnReload.classList.remove('spinning');
   }
-});
+}
+
+// Se a URL for do GLPI direto, passa pelo proxy /api/glpi (evita CORS)
+function buildFetchUrl(raw) {
+  try {
+    const u = new URL(raw);
+    if (u.hostname === 'avenida.verdanadesk.com') {
+      return '/api/glpi?url=' + encodeURIComponent(raw);
+    }
+    return raw;
+  } catch (e) {
+    return raw;
+  }
+}
+
+document.getElementById('btnLoad').addEventListener('click', doLoad);
+$btnReload.addEventListener('click', doLoad);
 
 function processData(json) {
   if (!json || !Array.isArray(json.data)) {
