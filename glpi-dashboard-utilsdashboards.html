@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<title>Dashboard · GLPI utilsdashboards</title>
+<title>Dashboard GLPI</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
@@ -12,28 +12,41 @@
     --ok: #06d6a0; --warn: #ffd166; --bad: #ef476f;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; min-height: 100vh; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; min-height: 100vh; font-size: 14px; }
   header { padding: 18px 28px; background: linear-gradient(180deg, #1a2740 0%, #131c2c 100%); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
   h1 { margin: 0; font-size: 18px; font-weight: 600; }
   h1 .accent { color: var(--accent); }
-  .badge { font-size: 11px; padding: 3px 10px; border-radius: 10px; background: var(--panel-2); color: var(--text-dim); border: 1px solid var(--border); }
-  main { padding: 22px 28px 60px; max-width: 1500px; margin: 0 auto; }
+  main { padding: 22px 28px 60px; max-width: 1600px; margin: 0 auto; }
 
-  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 18px; }
-  .card h2 { margin: 0 0 14px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); }
+  .filters { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 18px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .filters label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); margin-right: 6px; }
+  .filters select, .filters input { padding: 9px 13px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 13px; outline: none; min-width: 220px; }
+  .filters select:focus, .filters input:focus { border-color: var(--accent); }
+  .filters .spacer { flex: 1; }
 
-  .controls { display: flex; gap: 10px; align-items: center; }
-  .controls input { flex: 1; padding: 11px 14px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; font-size: 13px; font-family: ui-monospace, monospace; outline: none; }
-  .controls input:focus { border-color: var(--accent); }
-  button { padding: 11px 22px; background: var(--accent); color: #062033; border: 0; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-  button:hover:not(:disabled) { filter: brightness(1.1); }
-  button:disabled { opacity: .5; cursor: not-allowed; }
+  .refresh-bar { display: flex; justify-content: space-between; align-items: center; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; margin-bottom: 18px; font-size: 12px; }
+  .refresh-info { display: flex; align-items: center; gap: 10px; color: var(--text-dim); }
+  .refresh-info strong { color: var(--text); font-weight: 600; }
+  .refresh-ago { color: var(--text-dim); font-size: 11px; padding-left: 8px; border-left: 1px solid var(--border); }
+  .refresh-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 rgba(6,214,160,0.5); animation: pulse 2s infinite; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(6,214,160,0.6); }
+    70% { box-shadow: 0 0 0 8px rgba(6,214,160,0); }
+    100% { box-shadow: 0 0 0 0 rgba(6,214,160,0); }
+  }
+  .refresh-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; }
+  .refresh-btn:hover:not(:disabled) { background: var(--border); }
+  .refresh-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .refresh-btn.spinning svg { animation: spin 1s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
   .status { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; display: none; }
   .status.ok { display: block; background: rgba(6,214,160,0.1); border-left: 3px solid var(--ok); color: #a7f3d0; }
   .status.err { display: block; background: rgba(239,71,111,0.1); border-left: 3px solid var(--bad); color: #ffb3c1; }
   .status.loading { display: block; background: rgba(255,209,102,0.1); border-left: 3px solid var(--warn); color: #fde68a; }
 
+  .kpis-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 700px) { .kpis-hero { grid-template-columns: 1fr; } }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 18px; }
   .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; position: relative; overflow: hidden; }
   .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--accent); opacity: .6; }
@@ -43,10 +56,19 @@
   .kpi h3 { margin: 0 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); font-weight: 500; }
   .kpi .val { font-size: 26px; font-weight: 700; line-height: 1.1; }
   .kpi .sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+  .kpi-hero { padding: 24px 28px; border-radius: 16px; background: linear-gradient(135deg, var(--panel) 0%, var(--panel-2) 100%); }
+  .kpi-hero::before { height: 4px; opacity: 1; }
+  .kpi-hero h3 { font-size: 12px; letter-spacing: 1.5px; margin-bottom: 12px; color: var(--text); opacity: 0.7; }
+  .kpi-hero .val { font-size: 48px; font-weight: 800; letter-spacing: -1px; }
+  .kpi-hero .sub { font-size: 13px; margin-top: 8px; }
+  .kpi-hero.warn .val { color: var(--warn); }
+  .kpi-hero.ok .val { color: var(--ok); }
 
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 18px; }
   .grid.two { grid-template-columns: repeat(2, 1fr); }
-  @media (max-width: 900px) { .grid, .grid.two { grid-template-columns: 1fr; } }
+  @media (max-width: 1000px) { .grid, .grid.two { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .card h2 { margin: 0 0 14px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); }
   .chart-wrap { position: relative; height: 260px; }
   .chart-wrap.tall { height: 340px; }
 
@@ -55,12 +77,8 @@
   table td { padding: 7px 10px; border-bottom: 1px solid var(--panel-2); }
   table td.num { text-align: right; font-variant-numeric: tabular-nums; }
   table tr:hover td { background: var(--panel-2); }
-
   .scroll-y { max-height: 360px; overflow-y: auto; border-radius: 6px; }
 
-  .search-row { display: flex; gap: 10px; margin-bottom: 10px; }
-  .search-row input, .search-row select { padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 13px; outline: none; }
-  .search-row input { flex: 1; }
   .pill { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; background: var(--panel-2); border: 1px solid var(--border); white-space: nowrap; }
   .pill.s1 { background: rgba(76,201,240,0.15); color: #4cc9f0; }
   .pill.s2 { background: rgba(255,209,102,0.15); color: #ffd166; }
@@ -68,65 +86,54 @@
   .pill.s4 { background: rgba(247,37,133,0.15); color: #f72585; }
   .pill.s5 { background: rgba(6,214,160,0.15); color: #06d6a0; }
   .pill.s6 { background: rgba(120,140,170,0.15); color: #a4b3c9; }
+  .pill.sla-ok { background: rgba(6,214,160,0.15); color: #06d6a0; }
+  .pill.sla-bad { background: rgba(239,71,111,0.15); color: #ef476f; }
 
   .empty { text-align: center; padding: 50px 20px; color: var(--text-dim); }
   .empty h2 { color: var(--text-dim); font-size: 16px; margin: 0 0 10px; }
 
-  .help { font-size: 12px; color: var(--text-dim); margin-top: 10px; }
+  .search-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .search-row input, .search-row select { padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; font-size: 13px; outline: none; }
+  .search-row input { flex: 1; min-width: 200px; }
 
-  .refresh-bar {
-    display: flex; justify-content: space-between; align-items: center;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    padding: 10px 16px; margin-bottom: 18px; font-size: 12px;
-  }
-  .refresh-info { display: flex; align-items: center; gap: 10px; color: var(--text-dim); }
-  .refresh-info strong { color: var(--text); font-weight: 600; }
-  .refresh-ago { color: var(--text-dim); font-size: 11px; padding-left: 8px; border-left: 1px solid var(--border); }
-  .refresh-dot {
-    width: 8px; height: 8px; border-radius: 50%; background: var(--ok);
-    box-shadow: 0 0 0 0 rgba(6,214,160,0.5);
-    animation: pulse 2s infinite;
-  }
-  @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(6,214,160,0.6); }
-    70% { box-shadow: 0 0 0 8px rgba(6,214,160,0); }
-    100% { box-shadow: 0 0 0 0 rgba(6,214,160,0); }
-  }
-  .refresh-btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 7px 14px; background: var(--panel-2); color: var(--text);
-    border: 1px solid var(--border); border-radius: 6px;
-    font-size: 12px; font-weight: 500; cursor: pointer;
-  }
-  .refresh-btn:hover:not(:disabled) { background: var(--border); }
-  .refresh-btn:disabled { opacity: .5; cursor: not-allowed; }
-  .refresh-btn.spinning svg { animation: spin 1s linear infinite; }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .stars { color: #ffd166; letter-spacing: 1px; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Dashboard <span class="accent">utilsdashboards</span></h1>
-  <span class="badge" id="dashName">—</span>
+  <h1>Dashboard <span class="accent">GLPI</span></h1>
+  <span id="groupCountBadge" style="font-size: 11px; padding: 3px 10px; border-radius: 10px; background: var(--panel-2); color: var(--text-dim); border: 1px solid var(--border);">—</span>
 </header>
 
 <main>
 
-  <div class="card">
-    <h2>Endpoint</h2>
-    <div class="controls">
-      <input type="text" id="endpoint" placeholder="https://avenida.verdanadesk.com/plugins/utilsdashboards/front/ajax/graphic.json.php?token=..." value="https://avenida.verdanadesk.com/plugins/utilsdashboards/front/ajax/graphic.json.php?token=c975e02d9be93be2df481f5891413e33">
-      <button id="btnLoad">Carregar</button>
+  <div class="filters">
+    <div>
+      <label>Grupo</label>
+      <select id="filterGroup"><option value="">Carregando...</option></select>
     </div>
-    <div class="help">Cole a URL completa do endpoint público do dashboard.</div>
+    <div>
+      <label>Pendentes há mais de</label>
+      <select id="filterPendingDays">
+        <option value="3">3 dias</option>
+        <option value="7" selected>7 dias</option>
+        <option value="15">15 dias</option>
+        <option value="30">30 dias</option>
+      </select>
+    </div>
+    <div class="spacer"></div>
+    <div>
+      <label>Total na sele&ccedil;&atilde;o</label>
+      <strong id="kSelectedCount" style="font-size: 16px; color: var(--accent);">—</strong>
+    </div>
   </div>
 
   <div id="status" class="status"></div>
 
   <div id="empty" class="empty">
-    <h2>Aguardando dados</h2>
-    <p>Cole a URL do dashboard e clique em "Carregar".</p>
+    <h2>Carregando dados...</h2>
+    <p>Aguarde, buscando todos os endpoints em paralelo.</p>
   </div>
 
   <div id="results" style="display:none;">
@@ -143,76 +150,157 @@
       </button>
     </div>
 
+    <div class="kpis-hero">
+      <div class="kpi kpi-hero warn"><h3>Em atendimento agora</h3><div class="val" id="kInProgress">—</div><div class="sub" id="kInProgressSub"></div></div>
+      <div class="kpi kpi-hero ok"><h3>% atendidos hoje</h3><div class="val" id="kTodayPct">—</div><div class="sub" id="kTodaySub"></div></div>
+    </div>
+
     <div class="kpis">
       <div class="kpi"><h3>Total de tickets</h3><div class="val" id="kTotal">—</div><div class="sub" id="kTotalSub"></div></div>
-      <div class="kpi ok"><h3>Fechados / Solucionados</h3><div class="val" id="kClosed">—</div><div class="sub" id="kClosedSub"></div></div>
+      <div class="kpi ok"><h3>Fechados</h3><div class="val" id="kClosed">—</div><div class="sub" id="kClosedSub"></div></div>
       <div class="kpi warn"><h3>Em aberto</h3><div class="val" id="kOpen">—</div><div class="sub" id="kOpenSub"></div></div>
+      <div class="kpi bad"><h3>SLA estourado</h3><div class="val" id="kSlaBad">—</div><div class="sub" id="kSlaBadSub"></div></div>
       <div class="kpi"><h3>1º atendimento médio</h3><div class="val" id="kTta">—</div><div class="sub">abertura → 1º toque</div></div>
       <div class="kpi"><h3>Tempo médio resolução</h3><div class="val" id="kTtr">—</div><div class="sub">abertura → solução</div></div>
-      <div class="kpi"><h3>Duplicatas removidas</h3><div class="val" id="kDup">—</div><div class="sub">registros idênticos</div></div>
+      <div class="kpi"><h3>Pendentes críticos</h3><div class="val" id="kPending">—</div><div class="sub" id="kPendingSub"></div></div>
+      <div class="kpi"><h3>Reaberturas</h3><div class="val" id="kReopen">—</div><div class="sub" id="kReopenSub"></div></div>
     </div>
 
     <div class="grid">
-      <div class="card"><h2>Status</h2><div class="chart-wrap"><canvas id="chStatus"></canvas></div></div>
-      <div class="card"><h2>Origem da requisição</h2><div class="chart-wrap"><canvas id="chType"></canvas></div></div>
-      <div class="card"><h2>Faixas de tempo de resolução</h2><div class="chart-wrap"><canvas id="chTtrBucket"></canvas></div></div>
+      <div class="card"><h2>Por status</h2><div class="chart-wrap"><canvas id="chStatus"></canvas></div></div>
+      <div class="card"><h2>Por prioridade</h2><div class="chart-wrap"><canvas id="chPriority"></canvas></div></div>
+      <div class="card"><h2>SLA · cumprimento</h2><div class="chart-wrap"><canvas id="chSla"></canvas></div></div>
     </div>
 
-    <div class="card">
+    <div class="card" style="margin-bottom: 18px;">
       <h2>Linha do tempo · aberturas por dia</h2>
       <div class="chart-wrap tall"><canvas id="chTimeline"></canvas></div>
     </div>
 
     <div class="grid two">
+      <div class="card"><h2>Faixas de tempo de resolução</h2><div class="chart-wrap"><canvas id="chTtrBucket"></canvas></div></div>
+      <div class="card"><h2>Pendentes · distribuição por faixas</h2><div class="chart-wrap"><canvas id="chPendingBucket"></canvas></div></div>
+    </div>
+
+    <div class="card" style="margin-bottom: 18px;">
+      <h2>Tempo médio em cada status (workflow)</h2>
+      <div class="chart-wrap"><canvas id="chWorkflow"></canvas></div>
+    </div>
+
+    <div class="grid two">
       <div class="card">
-        <h2>Top 15 · Requerentes (USERS_ID_RECIPIENT)</h2>
+        <h2>Top 15 técnicos</h2>
         <div class="scroll-y">
-          <table id="tblRecipient">
-            <thead><tr><th>User ID</th><th class="num">Total</th><th class="num">Fechados</th><th class="num">Abertos</th></tr></thead>
-            <tbody></tbody>
+          <table>
+            <thead><tr><th>Técnico</th><th class="num">Total</th><th class="num">Fechados</th><th class="num">Em aberto</th><th class="num">TMR médio</th><th class="num">SLA %</th></tr></thead>
+            <tbody id="tblTech"></tbody>
           </table>
         </div>
       </div>
       <div class="card">
-        <h2>Top 15 · Últimos atualizadores (USERS_ID_LASTUPDATER)</h2>
+        <h2>Top 15 categorias</h2>
         <div class="scroll-y">
-          <table id="tblUpdater">
-            <thead><tr><th>User ID</th><th class="num">Tickets</th></tr></thead>
-            <tbody></tbody>
+          <table>
+            <thead><tr><th>Categoria</th><th class="num">Total</th><th class="num">Fechados</th><th class="num">TMR médio</th><th class="num">SLA %</th></tr></thead>
+            <tbody id="tblCat"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <h2>Top 15 requerentes</h2>
+        <div class="scroll-y">
+          <table>
+            <thead><tr><th>Requerente</th><th class="num">Total</th><th class="num">Fechados</th><th class="num">Em aberto</th></tr></thead>
+            <tbody id="tblReq"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Ativos com mais chamados</h2>
+        <div class="scroll-y">
+          <table>
+            <thead><tr><th>Tipo</th><th>Ativo</th><th class="num">Tickets</th></tr></thead>
+            <tbody id="tblAtivos"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid two">
+      <div class="card">
+        <h2>Satisfação dos usuários</h2>
+        <div style="display: flex; align-items: center; gap: 24px; padding: 10px 0;">
+          <div>
+            <div style="font-size: 36px; font-weight: 800;" id="satAvg">—</div>
+            <div style="font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px;">Nota média</div>
+          </div>
+          <div style="flex: 1;">
+            <div style="font-size: 11px; color: var(--text-dim); margin-bottom: 6px;">Distribuição</div>
+            <div class="chart-wrap" style="height: 120px;"><canvas id="chSat"></canvas></div>
+          </div>
+        </div>
+        <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;" id="satCount">—</div>
+      </div>
+      <div class="card">
+        <h2>Top 10 reaberturas</h2>
+        <div class="scroll-y">
+          <table>
+            <thead><tr><th>Ticket</th><th>Título</th><th class="num">Reaberturas</th><th>Última</th></tr></thead>
+            <tbody id="tblReopen"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 18px;">
+      <h2>Pendentes há mais de <span id="pendDaysLabel">7</span> dias</h2>
+      <div class="scroll-y">
+        <table>
+          <thead><tr><th>Ticket</th><th>Título</th><th>Status</th><th class="num">Dias aberto</th><th class="num">Sem atualizar</th><th>Técnico</th><th>Requerente</th></tr></thead>
+          <tbody id="tblPending"></tbody>
+        </table>
       </div>
     </div>
 
     <div class="card">
       <h2>Tickets <span id="tblCount" style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;"></span></h2>
       <div class="search-row">
-        <input type="text" id="tblSearch" placeholder="Buscar por título, ID ou user ID...">
+        <input type="text" id="tblSearch" placeholder="Buscar por ID, título, técnico ou requerente...">
         <select id="tblStatus">
           <option value="">Todos os status</option>
           <option value="1">1 · Novo</option>
-          <option value="2">2 · Em atendimento (atribuído)</option>
-          <option value="3">3 · Em atendimento (planejado)</option>
+          <option value="2">2 · Em atend. (atribuído)</option>
+          <option value="3">3 · Em atend. (planejado)</option>
           <option value="4">4 · Pendente</option>
           <option value="5">5 · Solucionado</option>
           <option value="6">6 · Fechado</option>
         </select>
+        <select id="tblSla">
+          <option value="">SLA · todos</option>
+          <option value="NO_PRAZO">No prazo</option>
+          <option value="ESTOURADO_ABERTO">Estourado (aberto)</option>
+          <option value="ESTOURADO_FECHADO">Estourado (fechado)</option>
+          <option value="SEM_SLA">Sem SLA</option>
+        </select>
         <select id="tblSort">
-          <option value="date_desc">Abertura ↓ (mais recente)</option>
-          <option value="date_asc">Abertura ↑ (mais antigo)</option>
-          <option value="ttr_desc">Maior tempo de resolução</option>
-          <option value="ttr_asc">Menor tempo de resolução</option>
+          <option value="date_desc">Abertura ↓</option>
+          <option value="date_asc">Abertura ↑</option>
+          <option value="ttr_desc">Maior TMR</option>
+          <option value="days_desc">Mais dias aberto</option>
         </select>
       </div>
       <div class="scroll-y" style="max-height: 500px;">
-        <table id="tblTickets">
+        <table>
           <thead><tr>
-            <th>ID</th><th>Título</th><th>Status</th>
-            <th>Abertura</th><th>1º Toque</th><th>Solução</th><th>Fechamento</th>
-            <th class="num">TTA</th><th class="num">TTR</th>
-            <th class="num">Req.</th><th class="num">Atu.</th>
+            <th>ID</th><th>Título</th><th>Status</th><th>SLA</th>
+            <th>Abertura</th><th class="num">Dias</th>
+            <th class="num">TTA</th><th class="num">TMR</th>
+            <th>Técnico</th><th>Requerente</th><th>Categoria</th>
           </tr></thead>
-          <tbody></tbody>
+          <tbody id="tblTickets"></tbody>
         </table>
       </div>
     </div>
@@ -222,128 +310,70 @@
 </main>
 
 <script>
-const STATUS_NAMES = {
-  1: 'Novo', 2: 'Em atend. (atribuído)', 3: 'Em atend. (planejado)',
-  4: 'Pendente', 5: 'Solucionado', 6: 'Fechado'
+// ============================================================================
+// CONFIG - URLs dos endpoints (via proxy /api/glpi quando necessário)
+// ============================================================================
+const HOST = 'https://avenida.verdanadesk.com';
+const TOKENS = {
+  Q01_GRUPOS:     'c412f6f2a39b4bd8f2ace68dc3823bee',
+  Q02B_TICKETS:   '80088ccf0b77cd545d5c315b39d307be',
+  Q03_STATUS:     '97e1151929f29960649d4070ca751156',
+  Q04_ATIVOS:     'e7db5c513411bfca261626e7d226edca',
+  Q05_REABERTURA: '2e340d25068bd567bbe836c428965577',
+  Q06_TECNICOS:   'ef1cd6c7c6feebb13ace33dce9ab707e',
+  Q07_REQUERENTES:'2ff4d4ee84222afbcc415780f05efef9',
+  Q08_SATISFACAO: 'a78428f8c7a9d58a38b5193a88e96ebf',
+  Q09_CATEGORIAS: '05a9bd6cf6566ff1a5fc3dbe56b5a9fe',
+  Q10_ENTIDADES:  '1b28d629d8cb67f0e730ae9c5417b6fe',
 };
-const REQUEST_TYPES = {
-  1: 'Helpdesk', 2: 'E-mail', 3: 'Telefone', 4: 'Outro',
-  5: 'Escrito', 6: 'Direto', 7: 'Formulário'
-};
+
+function endpoint(token) {
+  const raw = `${HOST}/plugins/utilsdashboards/front/ajax/graphic.json.php?token=${token}`;
+  return '/api/glpi?url=' + encodeURIComponent(raw);
+}
+
+// ============================================================================
+// LOOKUPS GLPI
+// ============================================================================
+const STATUS_NAMES = { 1: 'Novo', 2: 'Em atend. (atribuído)', 3: 'Em atend. (planejado)', 4: 'Pendente', 5: 'Solucionado', 6: 'Fechado' };
+const PRIORITY_NAMES = { 1: 'Muito baixa', 2: 'Baixa', 3: 'Média', 4: 'Alta', 5: 'Muito alta', 6: 'Maior' };
 const COLORS = ['#4cc9f0', '#f72585', '#06d6a0', '#ffd166', '#ef476f', '#a06cd5', '#ff9e00', '#90e0ef', '#b5179e', '#80ed99', '#fdc500', '#48bfe3'];
 Chart.defaults.color = '#8b9bb4';
 Chart.defaults.borderColor = '#2a3a52';
 
-const $status = document.getElementById('status');
-const $empty = document.getElementById('empty');
-const $results = document.getElementById('results');
-const $endpoint = document.getElementById('endpoint');
-const $dashName = document.getElementById('dashName');
-const $lastUpdate = document.getElementById('lastUpdate');
-const $updateAgo = document.getElementById('updateAgo');
-const $btnReload = document.getElementById('btnReload');
-let charts = {};
-let allTickets = [];
-let lastUpdateTime = null;
+// ============================================================================
+// ESTADO GLOBAL
+// ============================================================================
+const state = {
+  groups: [],           // Q01
+  tickets: [],          // Q02b
+  workflow: [],         // Q03
+  ativos: [],           // Q04
+  reaberturas: {},      // Q05 indexado por ticket_id
+  tecnicos: [],         // Q06
+  requerentes: [],      // Q07
+  satisfacao: {},       // Q08 indexado por ticket_id
+  categorias: {},       // Q09 id->nome
+  entidades: {},        // Q10 id->nome
+  selectedGroup: null,
+  lastUpdate: null,
+};
+
+const $ = id => document.getElementById(id);
+const charts = {};
 
 function setStatus(msg, kind) {
-  $status.className = 'status ' + kind;
-  $status.textContent = msg;
+  const el = $('status');
+  el.className = 'status ' + kind;
+  el.textContent = msg;
 }
 function destroyCharts() {
-  Object.values(charts).forEach(c => c && c.destroy());
-  charts = {};
+  Object.keys(charts).forEach(k => { if (charts[k]) { charts[k].destroy(); delete charts[k]; }});
 }
 
-function formatUpdateTime(d) {
-  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR');
-}
-function formatAgo(d) {
-  const s = Math.floor((Date.now() - d) / 1000);
-  if (s < 5) return 'agora mesmo';
-  if (s < 60) return 'há ' + s + 's';
-  if (s < 3600) return 'há ' + Math.floor(s/60) + ' min';
-  if (s < 86400) return 'há ' + Math.floor(s/3600) + 'h';
-  return 'há ' + Math.floor(s/86400) + 'd';
-}
-function updateAgoLabel() {
-  if (!lastUpdateTime) return;
-  $updateAgo.textContent = formatAgo(lastUpdateTime);
-}
-setInterval(updateAgoLabel, 10000); // atualiza o "há X" a cada 10s
-
-async function doLoad() {
-  const url = $endpoint.value.trim();
-  if (!url) { setStatus('Informe a URL.', 'err'); return; }
-
-  setStatus('Buscando dados...', 'loading');
-  document.getElementById('btnLoad').disabled = true;
-  $btnReload.disabled = true;
-  $btnReload.classList.add('spinning');
-  try {
-    const fetchUrl = buildFetchUrl(url);
-    const res = await fetch(fetchUrl);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const json = await res.json();
-    if (json.Warning) {
-      setStatus('Aviso do servidor: ' + json.Warning, 'err');
-      return;
-    }
-    processData(json);
-    lastUpdateTime = new Date();
-    $lastUpdate.textContent = formatUpdateTime(lastUpdateTime);
-    updateAgoLabel();
-  } catch (err) {
-    setStatus('Erro: ' + err.message + ' — se for CORS, hospede esta página no mesmo domínio do GLPI ou use uma extensão de CORS para teste.', 'err');
-  } finally {
-    document.getElementById('btnLoad').disabled = false;
-    $btnReload.disabled = false;
-    $btnReload.classList.remove('spinning');
-  }
-}
-
-// Se a URL for do GLPI direto, passa pelo proxy /api/glpi (evita CORS)
-function buildFetchUrl(raw) {
-  try {
-    const u = new URL(raw);
-    if (u.hostname === 'avenida.verdanadesk.com') {
-      return '/api/glpi?url=' + encodeURIComponent(raw);
-    }
-    return raw;
-  } catch (e) {
-    return raw;
-  }
-}
-
-document.getElementById('btnLoad').addEventListener('click', doLoad);
-$btnReload.addEventListener('click', doLoad);
-
-function processData(json) {
-  if (!json || !Array.isArray(json.data)) {
-    setStatus('Formato inesperado: esperava { data: [...] }.', 'err');
-    return;
-  }
-  $dashName.textContent = json.name || '(sem nome)';
-
-  // Deduplicar — chave por todos os campos relevantes
-  const seen = new Set();
-  const tickets = [];
-  let dupes = 0;
-  for (const t of json.data) {
-    const key = [t.ID, t.DATE, t.STATUS, t.USERS_ID_RECIPIENT, t.USERS_ID_LASTUPDATER].join('|');
-    if (seen.has(key)) { dupes++; continue; }
-    seen.add(key);
-    tickets.push(t);
-  }
-
-  allTickets = tickets;
-  document.getElementById('kDup').textContent = dupes.toLocaleString('pt-BR');
-  renderAll(tickets);
-  $empty.style.display = 'none';
-  $results.style.display = 'block';
-  setStatus('✓ ' + tickets.length + ' tickets analisados', 'ok');
-}
-
+// ============================================================================
+// HELPERS
+// ============================================================================
 function parseDate(s) {
   if (!s) return null;
   const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
@@ -361,231 +391,692 @@ function formatDuration(h) {
   if (h < 24) return h.toFixed(1) + 'h';
   return (h / 24).toFixed(1) + 'd';
 }
-function isOpen(status) {
-  return ![5, 6].includes(Number(status));
+function formatDateShort(d) {
+  if (!d) return '—';
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+function formatDateOnly(d) {
+  if (!d) return '—';
+  return d.toLocaleDateString('pt-BR');
+}
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function isTicketOpen(status) { return ![5, 6].includes(Number(status)); }
+function isInProgress(status) { return [2, 3].includes(Number(status)); }
+function pct(num, den) { return den ? (num / den * 100).toFixed(1) + '%' : '—'; }
+
+function computeSlaTtr(t) {
+  const sol = parseDate(t.solucao);
+  const prazo = parseDate(t.prazo_solucao);
+  if (!prazo) return 'SEM_SLA';
+  const now = new Date();
+  if (!sol && prazo < now) return 'ESTOURADO_ABERTO';
+  if (sol && sol <= prazo) return 'NO_PRAZO';
+  if (sol && sol > prazo) return 'ESTOURADO_FECHADO';
+  return 'SEM_SLA';
 }
 
-function renderAll(tickets) {
+// ============================================================================
+// FETCH
+// ============================================================================
+async function fetchJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' em ' + url);
+  return await res.json();
+}
+
+async function loadAll() {
   destroyCharts();
+  $('btnReload')?.classList.add('spinning');
+  setStatus('Buscando todos os endpoints em paralelo...', 'loading');
 
+  try {
+    const [q01, q02b, q03, q04, q05, q06, q07, q08, q09, q10] = await Promise.all([
+      fetchJson(endpoint(TOKENS.Q01_GRUPOS)),
+      fetchJson(endpoint(TOKENS.Q02B_TICKETS)),
+      fetchJson(endpoint(TOKENS.Q03_STATUS)),
+      fetchJson(endpoint(TOKENS.Q04_ATIVOS)),
+      fetchJson(endpoint(TOKENS.Q05_REABERTURA)),
+      fetchJson(endpoint(TOKENS.Q06_TECNICOS)),
+      fetchJson(endpoint(TOKENS.Q07_REQUERENTES)),
+      fetchJson(endpoint(TOKENS.Q08_SATISFACAO)),
+      fetchJson(endpoint(TOKENS.Q09_CATEGORIAS)),
+      fetchJson(endpoint(TOKENS.Q10_ENTIDADES)),
+    ]);
+
+    state.groups = q01.data || [];
+    state.tickets = q02b.data || [];
+    state.workflow = q03.data || [];
+    state.ativos = q04.data || [];
+    state.tecnicos = q06.data || [];
+    state.requerentes = q07.data || [];
+
+    // Indexar
+    state.reaberturas = {};
+    (q05.data || []).forEach(r => { state.reaberturas[r.ticket_id] = r; });
+
+    state.satisfacao = {};
+    (q08.data || []).forEach(s => { state.satisfacao[s.ticket_id] = s; });
+
+    state.categorias = {};
+    (q09.data || []).forEach(c => { state.categorias[c.id] = c.categoria; });
+
+    state.entidades = {};
+    (q10.data || []).forEach(e => { state.entidades[e.id] = e.entidade; });
+
+    state.lastUpdate = new Date();
+
+    populateGroupDropdown();
+    renderAll();
+    $('empty').style.display = 'none';
+    $('results').style.display = 'block';
+    setStatus(`✓ ${state.tickets.length} tickets carregados · ${state.groups.length} grupos`, 'ok');
+    updateLastUpdate();
+  } catch (err) {
+    setStatus('Erro: ' + err.message, 'err');
+    console.error(err);
+  } finally {
+    $('btnReload')?.classList.remove('spinning');
+  }
+}
+
+function populateGroupDropdown() {
+  const sel = $('filterGroup');
+  // Só grupos com tickets na base atual
+  const groupsWithTickets = new Set(state.tickets.map(t => t.grupo_id));
+  const groups = state.groups.filter(g => groupsWithTickets.has(g.id))
+    .sort((a, b) => (b.total_tickets || 0) - (a.total_tickets || 0));
+
+  sel.innerHTML = groups.map(g =>
+    `<option value="${g.id}">${escapeHtml(g.nome)} (${g.total_tickets})</option>`
+  ).join('');
+
+  // Default: Backoffice N2 (id 15) se existir, senão primeiro
+  const defaultId = groups.find(g => g.id === 15) ? 15 : groups[0]?.id;
+  if (defaultId != null) {
+    sel.value = String(defaultId);
+    state.selectedGroup = defaultId;
+  }
+  $('groupCountBadge').textContent = groups.length + ' grupos com tickets';
+}
+
+// ============================================================================
+// RENDER MASTER
+// ============================================================================
+function renderAll() {
+  destroyCharts();
+  const groupId = Number(state.selectedGroup);
+  const tickets = state.tickets.filter(t => Number(t.grupo_id) === groupId);
+  const ticketIds = new Set(tickets.map(t => t.id));
+
+  // Sub-conjuntos filtrados por ticketIds
+  const tecnicos = state.tecnicos.filter(x => ticketIds.has(x.ticket_id));
+  const requerentes = state.requerentes.filter(x => ticketIds.has(x.ticket_id));
+  const ativos = state.ativos.filter(x => ticketIds.has(x.ticket_id));
+  const workflow = state.workflow.filter(x => ticketIds.has(x.ticket_id));
+
+  $('kSelectedCount').textContent = tickets.length.toLocaleString('pt-BR');
+  $('tblCount').textContent = '· ' + tickets.length + ' no grupo';
+
+  renderKpis(tickets, ticketIds);
+  renderStatusChart(tickets);
+  renderPriorityChart(tickets);
+  renderSlaChart(tickets);
+  renderTimeline(tickets);
+  renderTtrBucket(tickets);
+  renderPendingBucket(tickets);
+  renderWorkflow(workflow);
+  renderTechTable(tickets, tecnicos);
+  renderCatTable(tickets);
+  renderReqTable(tickets, requerentes);
+  renderAtivosTable(ativos);
+  renderSatisfaction(tickets);
+  renderReopenTable(tickets);
+  renderPendingTable(tickets, tecnicos, requerentes);
+  renderTicketsTable(tickets, tecnicos, requerentes);
+}
+
+// ============================================================================
+// KPIs
+// ============================================================================
+function renderKpis(tickets, ticketIds) {
   const total = tickets.length;
-  const closed = tickets.filter(t => !isOpen(t.STATUS)).length;
+  const closed = tickets.filter(t => !isTicketOpen(t.status)).length;
   const open = total - closed;
+  const inProgress = tickets.filter(t => isInProgress(t.status)).length;
+  const slaBad = tickets.filter(t => {
+    const s = computeSlaTtr(t);
+    return s === 'ESTOURADO_ABERTO' || s === 'ESTOURADO_FECHADO';
+  }).length;
 
-  // Tempos
+  // TTA e TMR
   const ttas = [], ttrs = [];
   tickets.forEach(t => {
-    const open = parseDate(t.DATE);
-    const first = parseDate(t.TAKEINTOACCOUNTDATE);
-    const solved = parseDate(t.SOLVEDATE);
-    const tta = diffHours(open, first);
-    const ttr = diffHours(open, solved);
+    const ab = parseDate(t.abertura);
+    const ft = parseDate(t.primeiro_toque);
+    const sol = parseDate(t.solucao);
+    const tta = diffHours(ab, ft);
+    const ttr = diffHours(ab, sol);
     if (tta !== null) ttas.push(tta);
     if (ttr !== null) ttrs.push(ttr);
   });
   const avg = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
 
-  document.getElementById('kTotal').textContent = total.toLocaleString('pt-BR');
-  const minDate = tickets.map(t => parseDate(t.DATE)).filter(d => d).sort((a,b) => a-b)[0];
-  const maxDate = tickets.map(t => parseDate(t.DATE)).filter(d => d).sort((a,b) => b-a)[0];
-  document.getElementById('kTotalSub').textContent = minDate && maxDate
-    ? minDate.toLocaleDateString('pt-BR') + ' → ' + maxDate.toLocaleDateString('pt-BR') : '';
-  document.getElementById('kClosed').textContent = closed.toLocaleString('pt-BR');
-  document.getElementById('kClosedSub').textContent = total ? (closed/total*100).toFixed(1) + '%' : '';
-  document.getElementById('kOpen').textContent = open.toLocaleString('pt-BR');
-  document.getElementById('kOpenSub').textContent = total ? (open/total*100).toFixed(1) + '%' : '';
-  document.getElementById('kTta').textContent = formatDuration(avg(ttas));
-  document.getElementById('kTtr').textContent = formatDuration(avg(ttrs));
+  // Hoje
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const openedToday = tickets.filter(t => { const d = parseDate(t.abertura); return d && d >= today; });
+  const attendedToday = openedToday.filter(t => !isTicketOpen(t.status) || t.primeiro_toque).length;
+  const todayPct = openedToday.length ? (attendedToday / openedToday.length * 100) : null;
 
-  // Status chart
-  const byStatus = {};
-  tickets.forEach(t => {
-    const label = STATUS_NAMES[t.STATUS] || ('Status ' + t.STATUS);
-    byStatus[label] = (byStatus[label] || 0) + 1;
-  });
-  charts.status = makeDoughnut('chStatus', byStatus);
-
-  // Type chart
-  const byType = {};
-  tickets.forEach(t => {
-    const label = REQUEST_TYPES[t.REQUESTTYPES_ID] || ('Tipo ' + t.REQUESTTYPES_ID);
-    byType[label] = (byType[label] || 0) + 1;
-  });
-  charts.type = makeDoughnut('chType', byType);
-
-  // TTR buckets
-  const buckets = {
-    '< 1h': 0, '1-4h': 0, '4-24h': 0, '1-3d': 0, '3-7d': 0, '> 7d': 0
-  };
-  ttrs.forEach(h => {
-    if (h < 1) buckets['< 1h']++;
-    else if (h < 4) buckets['1-4h']++;
-    else if (h < 24) buckets['4-24h']++;
-    else if (h < 72) buckets['1-3d']++;
-    else if (h < 168) buckets['3-7d']++;
-    else buckets['> 7d']++;
-  });
-  charts.ttrBucket = new Chart(document.getElementById('chTtrBucket'), {
-    type: 'bar',
-    data: {
-      labels: Object.keys(buckets),
-      datasets: [{ data: Object.values(buckets), backgroundColor: COLORS, borderRadius: 4 }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true } }
-    }
+  // Pendentes críticos (dias_aberto >= filterPendingDays e em aberto)
+  const minDays = Number($('filterPendingDays').value);
+  const now = new Date();
+  const pending = tickets.filter(t => {
+    if (!isTicketOpen(t.status)) return false;
+    const d = parseDate(t.abertura);
+    if (!d) return false;
+    return Math.floor((now - d) / 86400000) >= minDays;
   });
 
-  // Timeline
-  const byDay = {};
-  tickets.forEach(t => {
-    const d = parseDate(t.DATE);
-    if (!d) return;
-    const k = d.toISOString().slice(0, 10);
-    byDay[k] = (byDay[k] || 0) + 1;
-  });
-  const days = Object.keys(byDay).sort();
-  charts.timeline = new Chart(document.getElementById('chTimeline'), {
-    type: 'line',
-    data: {
-      labels: days,
-      datasets: [{
-        label: 'Aberturas', data: days.map(d => byDay[d]),
-        borderColor: '#4cc9f0', backgroundColor: 'rgba(76,201,240,0.15)',
-        tension: 0.25, fill: true, pointRadius: 2
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 20 } }, y: { beginAtZero: true } }
-    }
-  });
+  // Reaberturas no grupo selecionado
+  const reopenInGroup = tickets.filter(t => state.reaberturas[t.id]);
 
-  // Top recipient
-  const recipMap = {};
-  tickets.forEach(t => {
-    const id = t.USERS_ID_RECIPIENT;
-    if (!id) return;
-    if (!recipMap[id]) recipMap[id] = { total: 0, closed: 0 };
-    recipMap[id].total++;
-    if (!isOpen(t.STATUS)) recipMap[id].closed++;
-  });
-  const topRecip = Object.entries(recipMap).sort((a,b) => b[1].total - a[1].total).slice(0, 15);
-  document.querySelector('#tblRecipient tbody').innerHTML = topRecip.map(([id, v]) => `
-    <tr><td>${id}</td><td class="num">${v.total}</td><td class="num">${v.closed}</td><td class="num">${v.total - v.closed}</td></tr>
-  `).join('');
+  // Atualizar DOM
+  $('kTotal').textContent = total.toLocaleString('pt-BR');
+  const dates = tickets.map(t => parseDate(t.abertura)).filter(d => d).sort((a,b) => a-b);
+  $('kTotalSub').textContent = dates.length ? formatDateOnly(dates[0]) + ' → ' + formatDateOnly(dates[dates.length-1]) : '';
 
-  // Top updater
-  const updMap = {};
-  tickets.forEach(t => {
-    const id = t.USERS_ID_LASTUPDATER;
-    if (!id) return;
-    updMap[id] = (updMap[id] || 0) + 1;
-  });
-  const topUpd = Object.entries(updMap).sort((a,b) => b[1] - a[1]).slice(0, 15);
-  document.querySelector('#tblUpdater tbody').innerHTML = topUpd.map(([id, v]) => `
-    <tr><td>${id}</td><td class="num">${v}</td></tr>
-  `).join('');
-
-  renderTable();
+  $('kClosed').textContent = closed.toLocaleString('pt-BR');
+  $('kClosedSub').textContent = pct(closed, total);
+  $('kOpen').textContent = open.toLocaleString('pt-BR');
+  $('kOpenSub').textContent = pct(open, total);
+  $('kInProgress').textContent = inProgress.toLocaleString('pt-BR');
+  $('kInProgressSub').textContent = pct(inProgress, total) + ' do total';
+  $('kTodayPct').textContent = todayPct === null ? '—' : todayPct.toFixed(1) + '%';
+  $('kTodaySub').textContent = openedToday.length ? attendedToday + ' de ' + openedToday.length + ' chamados de hoje' : 'sem chamados hoje';
+  $('kSlaBad').textContent = slaBad.toLocaleString('pt-BR');
+  $('kSlaBadSub').textContent = pct(slaBad, total);
+  $('kTta').textContent = formatDuration(avg(ttas));
+  $('kTtr').textContent = formatDuration(avg(ttrs));
+  $('kPending').textContent = pending.length.toLocaleString('pt-BR');
+  $('kPendingSub').textContent = '≥ ' + minDays + ' dias';
+  $('kReopen').textContent = reopenInGroup.length.toLocaleString('pt-BR');
+  const totalReopens = reopenInGroup.reduce((s, t) => s + (state.reaberturas[t.id]?.qtd_reaberturas || 0), 0);
+  $('kReopenSub').textContent = totalReopens + ' aberturas extras';
 }
 
-function renderTable() {
-  const q = document.getElementById('tblSearch').value.trim().toLowerCase();
-  const status = document.getElementById('tblStatus').value;
-  const sort = document.getElementById('tblSort').value;
-
-  let filtered = allTickets.filter(t => {
-    if (status && String(t.STATUS) !== status) return false;
-    if (q) {
-      const hay = [t.ID, t.NAME, t.USERS_ID_RECIPIENT, t.USERS_ID_LASTUPDATER].join(' ').toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
-
-  // Enriquece com TTR/TTA
-  filtered = filtered.map(t => {
-    const dOpen = parseDate(t.DATE);
-    const dFirst = parseDate(t.TAKEINTOACCOUNTDATE);
-    const dSolved = parseDate(t.SOLVEDATE);
-    const dClosed = parseDate(t.CLOSEDATE);
-    return {
-      ...t,
-      _dateOpen: dOpen,
-      _tta: diffHours(dOpen, dFirst),
-      _ttr: diffHours(dOpen, dSolved),
-      _dateClosed: dClosed,
-      _dateSolved: dSolved,
-      _dateFirst: dFirst,
-    };
-  });
-
-  filtered.sort((a, b) => {
-    if (sort === 'date_desc') return (b._dateOpen || 0) - (a._dateOpen || 0);
-    if (sort === 'date_asc')  return (a._dateOpen || 0) - (b._dateOpen || 0);
-    if (sort === 'ttr_desc')  return (b._ttr || -1) - (a._ttr || -1);
-    if (sort === 'ttr_asc')   return (a._ttr === null ? Infinity : a._ttr) - (b._ttr === null ? Infinity : b._ttr);
-    return 0;
-  });
-
-  document.getElementById('tblCount').textContent = '· ' + filtered.length + ' de ' + allTickets.length;
-
-  const tbody = document.querySelector('#tblTickets tbody');
-  const max = 500; // limita pra não travar
-  const slice = filtered.slice(0, max);
-  tbody.innerHTML = slice.map(t => `
-    <tr>
-      <td>${t.ID}</td>
-      <td>${escapeHtml(t.NAME || '')}</td>
-      <td><span class="pill s${t.STATUS}">${STATUS_NAMES[t.STATUS] || t.STATUS}</span></td>
-      <td>${formatDateShort(t._dateOpen)}</td>
-      <td>${formatDateShort(t._dateFirst)}</td>
-      <td>${formatDateShort(t._dateSolved)}</td>
-      <td>${formatDateShort(t._dateClosed)}</td>
-      <td class="num">${formatDuration(t._tta)}</td>
-      <td class="num">${formatDuration(t._ttr)}</td>
-      <td class="num">${t.USERS_ID_RECIPIENT || '—'}</td>
-      <td class="num">${t.USERS_ID_LASTUPDATER || '—'}</td>
-    </tr>
-  `).join('');
-
-  if (filtered.length > max) {
-    tbody.innerHTML += `<tr><td colspan="11" style="text-align:center; color: var(--text-dim); padding: 12px;">+ ${filtered.length - max} linhas ocultas (refine a busca)</td></tr>`;
-  }
-}
-
+// ============================================================================
+// GRÁFICOS
+// ============================================================================
 function makeDoughnut(canvasId, dataObj, palette) {
   const labels = Object.keys(dataObj);
   const values = Object.values(dataObj);
-  return new Chart(document.getElementById(canvasId), {
+  return new Chart($(canvasId), {
     type: 'doughnut',
     data: { labels, datasets: [{
       data: values,
       backgroundColor: palette || labels.map((_, i) => COLORS[i % COLORS.length]),
       borderWidth: 2, borderColor: '#182230'
     }] },
-    options: {
-      responsive: true, maintainAspectRatio: false, cutout: '60%',
-      plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } } }
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%',
+      plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } } } }
+  });
+}
+
+function renderStatusChart(tickets) {
+  const counts = {};
+  tickets.forEach(t => {
+    const k = STATUS_NAMES[t.status] || ('Status ' + t.status);
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  charts.status = makeDoughnut('chStatus', counts);
+}
+
+function renderPriorityChart(tickets) {
+  const counts = {};
+  tickets.forEach(t => {
+    const k = PRIORITY_NAMES[t.prioridade] || ('Prio ' + t.prioridade);
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  charts.priority = makeDoughnut('chPriority', counts);
+}
+
+function renderSlaChart(tickets) {
+  const counts = { 'No prazo': 0, 'Estourado (aberto)': 0, 'Estourado (fechado)': 0, 'Sem SLA': 0 };
+  tickets.forEach(t => {
+    const s = computeSlaTtr(t);
+    if (s === 'NO_PRAZO') counts['No prazo']++;
+    else if (s === 'ESTOURADO_ABERTO') counts['Estourado (aberto)']++;
+    else if (s === 'ESTOURADO_FECHADO') counts['Estourado (fechado)']++;
+    else counts['Sem SLA']++;
+  });
+  charts.sla = makeDoughnut('chSla', counts, ['#06d6a0', '#ef476f', '#f72585', '#8b9bb4']);
+}
+
+function renderTimeline(tickets) {
+  const byDay = {};
+  tickets.forEach(t => {
+    const d = parseDate(t.abertura);
+    if (!d) return;
+    const k = d.toISOString().slice(0, 10);
+    byDay[k] = (byDay[k] || 0) + 1;
+  });
+  const days = Object.keys(byDay).sort();
+  charts.timeline = new Chart($('chTimeline'), {
+    type: 'line',
+    data: { labels: days, datasets: [{
+      label: 'Aberturas', data: days.map(d => byDay[d]),
+      borderColor: '#4cc9f0', backgroundColor: 'rgba(76,201,240,0.15)',
+      tension: 0.25, fill: true, pointRadius: 2
+    }]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 20 } }, y: { beginAtZero: true } }
     }
   });
 }
 
-function formatDateShort(d) {
-  if (!d) return '—';
-  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-}
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function renderTtrBucket(tickets) {
+  const buckets = { '< 1h': 0, '1-4h': 0, '4-24h': 0, '1-3d': 0, '3-7d': 0, '> 7d': 0 };
+  tickets.forEach(t => {
+    const ttr = diffHours(parseDate(t.abertura), parseDate(t.solucao));
+    if (ttr === null) return;
+    if (ttr < 1) buckets['< 1h']++;
+    else if (ttr < 4) buckets['1-4h']++;
+    else if (ttr < 24) buckets['4-24h']++;
+    else if (ttr < 72) buckets['1-3d']++;
+    else if (ttr < 168) buckets['3-7d']++;
+    else buckets['> 7d']++;
+  });
+  charts.ttr = new Chart($('chTtrBucket'), {
+    type: 'bar',
+    data: { labels: Object.keys(buckets), datasets: [{ data: Object.values(buckets), backgroundColor: COLORS, borderRadius: 4 }]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }}, scales: { y: { beginAtZero: true } } }
+  });
 }
 
-document.getElementById('tblSearch').addEventListener('input', () => { if (allTickets.length) renderTable(); });
-document.getElementById('tblStatus').addEventListener('change', () => { if (allTickets.length) renderTable(); });
-document.getElementById('tblSort').addEventListener('change', () => { if (allTickets.length) renderTable(); });
+function renderPendingBucket(tickets) {
+  const now = new Date();
+  const buckets = { '0-1 dia': 0, '2-3 dias': 0, '4-7 dias': 0, '8-15 dias': 0, '16-30 dias': 0, '> 30 dias': 0 };
+  tickets.forEach(t => {
+    if (!isTicketOpen(t.status)) return;
+    const d = parseDate(t.abertura);
+    if (!d) return;
+    const days = Math.floor((now - d) / 86400000);
+    if (days <= 1) buckets['0-1 dia']++;
+    else if (days <= 3) buckets['2-3 dias']++;
+    else if (days <= 7) buckets['4-7 dias']++;
+    else if (days <= 15) buckets['8-15 dias']++;
+    else if (days <= 30) buckets['16-30 dias']++;
+    else buckets['> 30 dias']++;
+  });
+  charts.pendingBucket = new Chart($('chPendingBucket'), {
+    type: 'bar',
+    data: { labels: Object.keys(buckets), datasets: [{ data: Object.values(buckets),
+      backgroundColor: ['#06d6a0', '#80ed99', '#ffd166', '#ff9e00', '#f72585', '#ef476f'], borderRadius: 4 }]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }}, scales: { y: { beginAtZero: true } } }
+  });
+}
+
+function renderWorkflow(workflow) {
+  // Média de horas em cada status
+  const sums = {};
+  workflow.forEach(w => {
+    const h = Number(w.horas_no_status);
+    if (isNaN(h)) return;
+    if (!sums[w.status]) sums[w.status] = { total: 0, count: 0 };
+    sums[w.status].total += h;
+    sums[w.status].count += 1;
+  });
+  const labels = Object.keys(sums);
+  const data = labels.map(l => sums[l].total / sums[l].count);
+  charts.workflow = new Chart($('chWorkflow'), {
+    type: 'bar',
+    data: { labels, datasets: [{ data, backgroundColor: '#4cc9f0', borderRadius: 4 }]},
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => formatDuration(ctx.raw) } } },
+      scales: { x: { ticks: { callback: (v) => formatDuration(v) } } }
+    }
+  });
+}
+
+// ============================================================================
+// TABELAS
+// ============================================================================
+function renderTechTable(tickets, tecnicos) {
+  const ticketById = Object.fromEntries(tickets.map(t => [t.id, t]));
+  const map = {};
+  tecnicos.forEach(x => {
+    const t = ticketById[x.ticket_id];
+    if (!t) return;
+    if (!map[x.tecnico_id]) map[x.tecnico_id] = { nome: x.tecnico, total: 0, closed: 0, ttrs: [], slaOk: 0, slaTotal: 0 };
+    const m = map[x.tecnico_id];
+    m.total++;
+    if (!isTicketOpen(t.status)) m.closed++;
+    const ttr = diffHours(parseDate(t.abertura), parseDate(t.solucao));
+    if (ttr !== null) m.ttrs.push(ttr);
+    const sla = computeSlaTtr(t);
+    if (sla !== 'SEM_SLA') {
+      m.slaTotal++;
+      if (sla === 'NO_PRAZO') m.slaOk++;
+    }
+  });
+  const rows = Object.entries(map)
+    .map(([id, m]) => ({ id, ...m, ttrAvg: m.ttrs.length ? m.ttrs.reduce((s,v) => s+v, 0) / m.ttrs.length : null }))
+    .sort((a,b) => b.total - a.total)
+    .slice(0, 15);
+
+  $('tblTech').innerHTML = rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.nome)}</td>
+      <td class="num">${r.total}</td>
+      <td class="num">${r.closed}</td>
+      <td class="num">${r.total - r.closed}</td>
+      <td class="num">${formatDuration(r.ttrAvg)}</td>
+      <td class="num">${r.slaTotal ? (r.slaOk / r.slaTotal * 100).toFixed(0) + '%' : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function renderCatTable(tickets) {
+  const map = {};
+  tickets.forEach(t => {
+    const id = t.categoria_id || 0;
+    const nome = state.categorias[id] || (id === 0 ? '(sem categoria)' : 'ID ' + id);
+    if (!map[id]) map[id] = { nome, total: 0, closed: 0, ttrs: [], slaOk: 0, slaTotal: 0 };
+    const m = map[id];
+    m.total++;
+    if (!isTicketOpen(t.status)) m.closed++;
+    const ttr = diffHours(parseDate(t.abertura), parseDate(t.solucao));
+    if (ttr !== null) m.ttrs.push(ttr);
+    const sla = computeSlaTtr(t);
+    if (sla !== 'SEM_SLA') {
+      m.slaTotal++;
+      if (sla === 'NO_PRAZO') m.slaOk++;
+    }
+  });
+  const rows = Object.values(map)
+    .map(m => ({ ...m, ttrAvg: m.ttrs.length ? m.ttrs.reduce((s,v) => s+v, 0) / m.ttrs.length : null }))
+    .sort((a,b) => b.total - a.total)
+    .slice(0, 15);
+
+  $('tblCat').innerHTML = rows.map(r => `
+    <tr>
+      <td title="${escapeHtml(r.nome)}">${escapeHtml(r.nome.length > 50 ? r.nome.slice(0, 47) + '...' : r.nome)}</td>
+      <td class="num">${r.total}</td>
+      <td class="num">${r.closed}</td>
+      <td class="num">${formatDuration(r.ttrAvg)}</td>
+      <td class="num">${r.slaTotal ? (r.slaOk / r.slaTotal * 100).toFixed(0) + '%' : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function renderReqTable(tickets, requerentes) {
+  const ticketById = Object.fromEntries(tickets.map(t => [t.id, t]));
+  const map = {};
+  requerentes.forEach(x => {
+    const t = ticketById[x.ticket_id];
+    if (!t) return;
+    if (!map[x.requerente_id]) map[x.requerente_id] = { nome: x.requerente, total: 0, closed: 0 };
+    map[x.requerente_id].total++;
+    if (!isTicketOpen(t.status)) map[x.requerente_id].closed++;
+  });
+  const rows = Object.values(map).sort((a,b) => b.total - a.total).slice(0, 15);
+  $('tblReq').innerHTML = rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.nome)}</td>
+      <td class="num">${r.total}</td>
+      <td class="num">${r.closed}</td>
+      <td class="num">${r.total - r.closed}</td>
+    </tr>
+  `).join('');
+}
+
+function renderAtivosTable(ativos) {
+  // Filtra fora os PluginFormcreator
+  const real = ativos.filter(a => !a.tipo_ativo.startsWith('PluginFormcreator'));
+  const map = {};
+  real.forEach(a => {
+    const k = a.tipo_ativo + '|' + a.ativo_id;
+    if (!map[k]) map[k] = { tipo: a.tipo_ativo, nome: a.nome_ativo, count: 0 };
+    map[k].count++;
+  });
+  const rows = Object.values(map).sort((a,b) => b.count - a.count).slice(0, 15);
+  if (rows.length === 0) {
+    $('tblAtivos').innerHTML = '<tr><td colspan="3" style="text-align:center; color: var(--text-dim); padding: 24px;">Sem ativos reais vinculados</td></tr>';
+    return;
+  }
+  $('tblAtivos').innerHTML = rows.map(r => `
+    <tr>
+      <td>${escapeHtml(r.tipo)}</td>
+      <td>${escapeHtml(r.nome)}</td>
+      <td class="num">${r.count}</td>
+    </tr>
+  `).join('');
+}
+
+function renderSatisfaction(tickets) {
+  const ticketIds = new Set(tickets.map(t => t.id));
+  const notas = [];
+  tickets.forEach(t => {
+    const s = state.satisfacao[t.id];
+    if (s && s.nota != null) notas.push(Number(s.nota));
+  });
+  if (notas.length === 0) {
+    $('satAvg').textContent = '—';
+    $('satCount').textContent = 'Sem respostas de satisfação';
+    if (charts.sat) { charts.sat.destroy(); delete charts.sat; }
+    return;
+  }
+  const avg = notas.reduce((s,v) => s+v, 0) / notas.length;
+  $('satAvg').textContent = avg.toFixed(2);
+  $('satCount').textContent = notas.length + ' respostas';
+
+  const dist = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+  notas.forEach(n => { dist[String(n)] = (dist[String(n)] || 0) + 1; });
+  charts.sat = new Chart($('chSat'), {
+    type: 'bar',
+    data: { labels: ['1★','2★','3★','4★','5★'],
+      datasets: [{ data: Object.values(dist),
+        backgroundColor: ['#ef476f', '#f72585', '#ffd166', '#80ed99', '#06d6a0'],
+        borderRadius: 3 }]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }}, scales: { y: { beginAtZero: true, ticks: { display: false } }, x: { grid: { display: false } } } }
+  });
+}
+
+function renderReopenTable(tickets) {
+  const rows = tickets
+    .filter(t => state.reaberturas[t.id])
+    .map(t => ({ t, r: state.reaberturas[t.id] }))
+    .sort((a, b) => b.r.qtd_reaberturas - a.r.qtd_reaberturas)
+    .slice(0, 10);
+  if (rows.length === 0) {
+    $('tblReopen').innerHTML = '<tr><td colspan="4" style="text-align:center; color: var(--text-dim); padding: 24px;">Sem reaberturas neste grupo</td></tr>';
+    return;
+  }
+  $('tblReopen').innerHTML = rows.map(({ t, r }) => `
+    <tr>
+      <td>${t.id}</td>
+      <td title="${escapeHtml(t.titulo)}">${escapeHtml((t.titulo || '').slice(0, 50))}</td>
+      <td class="num"><strong style="color: var(--bad)">${r.qtd_reaberturas}</strong></td>
+      <td>${formatDateOnly(parseDate(r.ultima_reabertura))}</td>
+    </tr>
+  `).join('');
+}
+
+function renderPendingTable(tickets, tecnicos, requerentes) {
+  const minDays = Number($('filterPendingDays').value);
+  $('pendDaysLabel').textContent = minDays;
+  const now = new Date();
+
+  // Indexar técnicos e requerentes por ticket
+  const techByTicket = {};
+  tecnicos.forEach(x => {
+    if (!techByTicket[x.ticket_id]) techByTicket[x.ticket_id] = [];
+    techByTicket[x.ticket_id].push(x.tecnico);
+  });
+  const reqByTicket = {};
+  requerentes.forEach(x => {
+    if (!reqByTicket[x.ticket_id]) reqByTicket[x.ticket_id] = x.requerente;
+  });
+
+  const rows = tickets
+    .filter(t => {
+      if (!isTicketOpen(t.status)) return false;
+      const d = parseDate(t.abertura);
+      if (!d) return false;
+      return Math.floor((now - d) / 86400000) >= minDays;
+    })
+    .map(t => {
+      const d = parseDate(t.abertura);
+      const mod = parseDate(t.ultima_atualizacao);
+      return {
+        ...t,
+        dias_aberto: Math.floor((now - d) / 86400000),
+        dias_sem_atualizar: mod ? Math.floor((now - mod) / 86400000) : null,
+        techNames: (techByTicket[t.id] || []).join(', '),
+        reqName: reqByTicket[t.id] || '—',
+      };
+    })
+    .sort((a,b) => b.dias_aberto - a.dias_aberto);
+
+  if (rows.length === 0) {
+    $('tblPending').innerHTML = '<tr><td colspan="7" style="text-align:center; color: var(--text-dim); padding: 24px;">Nenhum pendente acima do critério</td></tr>';
+    return;
+  }
+
+  const max = 200;
+  $('tblPending').innerHTML = rows.slice(0, max).map(t => `
+    <tr>
+      <td>${t.id}</td>
+      <td title="${escapeHtml(t.titulo)}">${escapeHtml((t.titulo || '').slice(0, 60))}</td>
+      <td><span class="pill s${t.status}">${STATUS_NAMES[t.status] || t.status}</span></td>
+      <td class="num">${t.dias_aberto}</td>
+      <td class="num">${t.dias_sem_atualizar ?? '—'}</td>
+      <td>${escapeHtml(t.techNames || '—')}</td>
+      <td>${escapeHtml(t.reqName)}</td>
+    </tr>
+  `).join('') + (rows.length > max ? `<tr><td colspan="7" style="text-align:center; color: var(--text-dim); padding: 12px;">+ ${rows.length - max} linhas ocultas</td></tr>` : '');
+}
+
+function renderTicketsTable(tickets, tecnicos, requerentes) {
+  const techByTicket = {};
+  tecnicos.forEach(x => {
+    if (!techByTicket[x.ticket_id]) techByTicket[x.ticket_id] = [];
+    techByTicket[x.ticket_id].push(x.tecnico);
+  });
+  const reqByTicket = {};
+  requerentes.forEach(x => { if (!reqByTicket[x.ticket_id]) reqByTicket[x.ticket_id] = x.requerente; });
+
+  const q = $('tblSearch').value.trim().toLowerCase();
+  const status = $('tblStatus').value;
+  const slaFilter = $('tblSla').value;
+  const sort = $('tblSort').value;
+  const now = new Date();
+
+  let rows = tickets.map(t => {
+    const ab = parseDate(t.abertura);
+    const ft = parseDate(t.primeiro_toque);
+    const sol = parseDate(t.solucao);
+    return {
+      ...t,
+      _ab: ab,
+      _tta: diffHours(ab, ft),
+      _ttr: diffHours(ab, sol),
+      _days: ab ? Math.floor((now - ab) / 86400000) : null,
+      _sla: computeSlaTtr(t),
+      _tech: (techByTicket[t.id] || []).join(', '),
+      _req: reqByTicket[t.id] || '',
+      _cat: state.categorias[t.categoria_id || 0] || '',
+    };
+  });
+
+  rows = rows.filter(r => {
+    if (status && String(r.status) !== status) return false;
+    if (slaFilter && r._sla !== slaFilter) return false;
+    if (q) {
+      const hay = [r.id, r.titulo, r._tech, r._req, r._cat].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  rows.sort((a, b) => {
+    if (sort === 'date_desc') return (b._ab || 0) - (a._ab || 0);
+    if (sort === 'date_asc')  return (a._ab || 0) - (b._ab || 0);
+    if (sort === 'ttr_desc')  return (b._ttr ?? -1) - (a._ttr ?? -1);
+    if (sort === 'days_desc') return (b._days ?? -1) - (a._days ?? -1);
+    return 0;
+  });
+
+  $('tblCount').textContent = '· ' + rows.length + ' filtrados de ' + tickets.length;
+
+  const max = 300;
+  const slaPill = s => s === 'NO_PRAZO' ? '<span class="pill sla-ok">No prazo</span>'
+    : s === 'ESTOURADO_ABERTO' ? '<span class="pill sla-bad">Estourado</span>'
+    : s === 'ESTOURADO_FECHADO' ? '<span class="pill sla-bad">Estourado (F)</span>'
+    : '<span class="pill">—</span>';
+
+  $('tblTickets').innerHTML = rows.slice(0, max).map(r => `
+    <tr>
+      <td>${r.id}</td>
+      <td title="${escapeHtml(r.titulo)}">${escapeHtml((r.titulo || '').slice(0, 50))}</td>
+      <td><span class="pill s${r.status}">${STATUS_NAMES[r.status] || r.status}</span></td>
+      <td>${slaPill(r._sla)}</td>
+      <td>${formatDateShort(r._ab)}</td>
+      <td class="num">${r._days ?? '—'}</td>
+      <td class="num">${formatDuration(r._tta)}</td>
+      <td class="num">${formatDuration(r._ttr)}</td>
+      <td title="${escapeHtml(r._tech)}">${escapeHtml((r._tech || '').slice(0, 25))}</td>
+      <td>${escapeHtml((r._req || '').slice(0, 25))}</td>
+      <td title="${escapeHtml(r._cat)}">${escapeHtml((r._cat || '').split(' > ').slice(-1)[0].slice(0, 30))}</td>
+    </tr>
+  `).join('') + (rows.length > max ? `<tr><td colspan="11" style="text-align:center; color: var(--text-dim); padding: 12px;">+ ${rows.length - max} linhas (refine a busca)</td></tr>` : '');
+}
+
+// ============================================================================
+// "Última atualização"
+// ============================================================================
+function formatAgo(d) {
+  const s = Math.floor((Date.now() - d) / 1000);
+  if (s < 5) return 'agora mesmo';
+  if (s < 60) return 'há ' + s + 's';
+  if (s < 3600) return 'há ' + Math.floor(s/60) + ' min';
+  if (s < 86400) return 'há ' + Math.floor(s/3600) + 'h';
+  return 'há ' + Math.floor(s/86400) + 'd';
+}
+function updateLastUpdate() {
+  if (!state.lastUpdate) return;
+  $('lastUpdate').textContent = state.lastUpdate.toLocaleDateString('pt-BR') + ' às ' + state.lastUpdate.toLocaleTimeString('pt-BR');
+  $('updateAgo').textContent = formatAgo(state.lastUpdate);
+}
+setInterval(updateLastUpdate, 10000);
+
+// ============================================================================
+// EVENTOS
+// ============================================================================
+$('filterGroup').addEventListener('change', (e) => {
+  state.selectedGroup = Number(e.target.value);
+  renderAll();
+});
+$('filterPendingDays').addEventListener('change', () => renderAll());
+$('tblSearch').addEventListener('input', () => {
+  // re-render só a tabela (mais leve)
+  const groupId = Number(state.selectedGroup);
+  const tickets = state.tickets.filter(t => Number(t.grupo_id) === groupId);
+  const ticketIds = new Set(tickets.map(t => t.id));
+  const tecnicos = state.tecnicos.filter(x => ticketIds.has(x.ticket_id));
+  const requerentes = state.requerentes.filter(x => ticketIds.has(x.ticket_id));
+  renderTicketsTable(tickets, tecnicos, requerentes);
+});
+$('tblStatus').addEventListener('change', () => $('tblSearch').dispatchEvent(new Event('input')));
+$('tblSla').addEventListener('change', () => $('tblSearch').dispatchEvent(new Event('input')));
+$('tblSort').addEventListener('change', () => $('tblSearch').dispatchEvent(new Event('input')));
+$('btnReload').addEventListener('click', loadAll);
+
+document.addEventListener('DOMContentLoaded', loadAll);
 </script>
 
 </body>
