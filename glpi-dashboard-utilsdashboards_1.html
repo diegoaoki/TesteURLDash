@@ -35,6 +35,8 @@
   .status.loading { display: block; background: rgba(255,209,102,0.1); border-left: 3px solid var(--warn); color: #fde68a; }
 
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 18px; }
+  .kpis-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 700px) { .kpis-hero { grid-template-columns: 1fr; } }
   .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; position: relative; overflow: hidden; }
   .kpi::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--accent); opacity: .6; }
   .kpi.ok::before { background: var(--ok); }
@@ -43,6 +45,13 @@
   .kpi h3 { margin: 0 0 6px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); font-weight: 500; }
   .kpi .val { font-size: 26px; font-weight: 700; line-height: 1.1; }
   .kpi .sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+  .kpi-hero { padding: 24px 28px; border-radius: 16px; background: linear-gradient(135deg, var(--panel) 0%, var(--panel-2) 100%); border-width: 1px; }
+  .kpi-hero::before { height: 4px; opacity: 1; }
+  .kpi-hero h3 { font-size: 12px; letter-spacing: 1.5px; margin-bottom: 12px; color: var(--text); opacity: 0.7; }
+  .kpi-hero .val { font-size: 48px; font-weight: 800; letter-spacing: -1px; }
+  .kpi-hero .sub { font-size: 13px; margin-top: 8px; }
+  .kpi-hero.warn .val { color: var(--warn); }
+  .kpi-hero.ok .val { color: var(--ok); }
 
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 18px; }
   .grid.two { grid-template-columns: repeat(2, 1fr); }
@@ -134,10 +143,13 @@
       </button>
     </div>
 
+    <div class="kpis-hero">
+      <div class="kpi kpi-hero warn"><h3>Em atendimento agora</h3><div class="val" id="kInProgress">—</div><div class="sub" id="kInProgressSub"></div></div>
+      <div class="kpi kpi-hero ok"><h3>% atendidos hoje</h3><div class="val" id="kTodayPct">—</div><div class="sub" id="kTodaySub"></div></div>
+    </div>
+
     <div class="kpis">
       <div class="kpi"><h3>Total de tickets</h3><div class="val" id="kTotal">—</div><div class="sub" id="kTotalSub"></div></div>
-      <div class="kpi warn"><h3>Em atendimento agora</h3><div class="val" id="kInProgress">—</div><div class="sub" id="kInProgressSub"></div></div>
-      <div class="kpi ok"><h3>% atendidos hoje</h3><div class="val" id="kTodayPct">—</div><div class="sub" id="kTodaySub"></div></div>
       <div class="kpi ok"><h3>Fechados / Solucionados</h3><div class="val" id="kClosed">—</div><div class="sub" id="kClosedSub"></div></div>
       <div class="kpi warn"><h3>Em aberto</h3><div class="val" id="kOpen">—</div><div class="sub" id="kOpenSub"></div></div>
       <div class="kpi"><h3>1º atendimento médio</h3><div class="val" id="kTta">—</div><div class="sub">abertura → 1º toque</div></div>
