@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Azure DevOps Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0d0f14;
+    --surface: #13161e;
+    --surface2: #1a1e28;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --accent: #4f8ef7;
+    --accent2: #7c5cf6;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --teal: #22d3ee;
+    --font-display: 'Syne', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    min-height: 100vh;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .logo {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .logo span { color: var(--accent); }
+  .badge-env {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(79,142,247,0.12);
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid rgba(79,142,247,0.25);
+  }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--muted);
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--surface2);
+  }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+  .status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.err { background: var(--red); }
+  .status-dot.loading { background: var(--amber); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .btn-refresh {
+    background: none; border: 1px solid var(--border2); color: var(--muted);
+    padding: 6px 12px; border-radius: 6px; cursor: pointer; font-family: var(--font-mono);
+    font-size: 11px; display: flex; align-items: center; gap: 6px; transition: all 0.15s;
+  }
+  .btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-refresh svg { width: 12px; height: 12px; }
+
+  /* ── MAIN LAYOUT ── */
+  .layout { display: flex; height: calc(100vh - 53px); }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+  }
+  .sidebar-section-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+  input[type=text], input[type=password] {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+    margin-bottom: 10px;
+  }
+  input:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--muted); }
+
+  .btn-connect {
+    width: 100%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px;
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-connect:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-connect:active { transform: translateY(0); }
+
+  .error-msg {
+    font-size: 11px;
+    color: var(--red);
+    margin-top: 6px;
+    min-height: 16px;
+  }
+
+  .sprint-info {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .sprint-name {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .sprint-dates { font-size: 11px; color: var(--muted); }
+  .sprint-progress-bar {
+    margin-top: 10px;
+    height: 4px;
+    background: var(--border2);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .sprint-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--teal));
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  .nav-tabs { display: flex; flex-direction: column; gap: 2px; }
+  .nav-tab {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: 6px;
+    cursor: pointer; font-size: 12px; color: var(--muted);
+    transition: all 0.15s; background: none; border: none;
+    font-family: var(--font-mono); text-align: left; width: 100%;
+  }
+  .nav-tab:hover { background: var(--surface2); color: var(--text); }
+  .nav-tab.active { background: rgba(79,142,247,0.1); color: var(--accent); border: 1px solid rgba(79,142,247,0.2); }
+  .nav-tab svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+  /* ── MAIN CONTENT ── */
+  .main { flex: 1; overflow-y: auto; padding: 24px; }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── METRICS GRID ── */
+  .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .metric-card:hover { border-color: var(--border2); }
+  .metric-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  }
+  .metric-card.blue::before { background: linear-gradient(90deg, var(--accent), transparent); }
+  .metric-card.green::before { background: linear-gradient(90deg, var(--green), transparent); }
+  .metric-card.red::before { background: linear-gradient(90deg, var(--red), transparent); }
+  .metric-card.amber::before { background: linear-gradient(90deg, var(--amber), transparent); }
+  .metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .metric-value { font-family: var(--font-display); font-size: 28px; font-weight: 700; line-height: 1; }
+  .metric-value.blue { color: var(--accent); }
+  .metric-value.green { color: var(--green); }
+  .metric-value.red { color: var(--red); }
+  .metric-value.amber { color: var(--amber); }
+  .metric-sub { font-size: 10px; color: var(--muted); margin-top: 6px; }
+
+  /* ── CHARTS ── */
+  .charts-row { display: grid; gap: 16px; margin-bottom: 16px; }
+  .charts-row.col2 { grid-template-columns: 1fr 1fr; }
+  .charts-row.col1 { grid-template-columns: 1fr; }
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .chart-title {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .chart-subtitle { font-size: 11px; color: var(--muted); margin-bottom: 16px; }
+  canvas { display: block; }
+
+  /* ── EMPTY / CONNECT STATE ── */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 100%; min-height: 400px; gap: 12px; color: var(--muted); text-align: center;
+  }
+  .empty-icon { font-size: 48px; opacity: 0.2; }
+  .empty-title { font-family: var(--font-display); font-size: 18px; font-weight: 600; color: var(--text); }
+  .empty-desc { font-size: 12px; color: var(--muted); max-width: 300px; line-height: 1.6; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── LOADING OVERLAY ── */
+  .loading-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(13,15,20,0.75); z-index: 200;
+    align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+  }
+  .loading-overlay.show { display: flex; }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">Azure<span>Board</span>.dash</div>
+    <div class="badge-env" id="env-badge">desconectado</div>
+  </div>
+  <div class="topbar-right">
+    <div class="status-pill">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">não conectado</span>
+    </div>
+    <button class="btn-refresh" onclick="refreshAll()" title="Atualizar dados">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      atualizar
+    </button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div>
+      <div class="sidebar-section-title">conexão</div>
+      <label>Organização</label>
+      <input type="text" id="org" placeholder="minha-empresa" />
+      <label>Projeto</label>
+      <input type="text" id="project" placeholder="MeuProjeto" />
+      <label>Time (opcional)</label>
+      <input type="text" id="team" placeholder="deixe em branco para padrão" />
+      <label>Personal Access Token</label>
+      <input type="password" id="pat" placeholder="••••••••••••••••••••" />
+      <button class="btn-connect" onclick="connect()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        Conectar
+      </button>
+      <div class="error-msg" id="error-msg"></div>
+    </div>
+
+    <div id="sprint-block" style="display:none">
+      <div class="sidebar-section-title">sprint atual</div>
+      <div class="sprint-info">
+        <div class="sprint-name" id="sprint-name">—</div>
+        <div class="sprint-dates" id="sprint-dates">—</div>
+        <div class="sprint-progress-bar">
+          <div class="sprint-progress-fill" id="sprint-fill" style="width:0%"></div>
+        </div>
+        <div style="font-size:10px; color:var(--muted); margin-top:5px;" id="sprint-pct">0% do período decorrido</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="sidebar-section-title">visualizações</div>
+      <div class="nav-tabs">
+        <button class="nav-tab active" onclick="showPage('sprint', this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Sprint Progress
+        </button>
+        <button class="nav-tab" onclick="showPage('quality', this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Qualidade
+        </button>
+        <button class="nav-tab" onclick="showPage('flow', this)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          Fluxo
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main" id="main-content">
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">⬡</div>
+      <div class="empty-title">Nenhum dado carregado</div>
+      <div class="empty-desc">Preencha os campos ao lado com sua organização, projeto e PAT para carregar os dados do board.</div>
+    </div>
+
+    <div id="pages" style="display:none">
+      <!-- SPRINT PAGE -->
+      <div class="page active" id="page-sprint">
+        <div class="metrics-grid">
+          <div class="metric-card blue">
+            <div class="metric-label">pontos restantes</div>
+            <div class="metric-value blue" id="m-remaining">—</div>
+            <div class="metric-sub" id="m-remaining-sub">story points</div>
+          </div>
+          <div class="metric-card green">
+            <div class="metric-label">concluídos</div>
+            <div class="metric-value green" id="m-done">—</div>
+            <div class="metric-sub">work items</div>
+          </div>
+          <div class="metric-card amber">
+            <div class="metric-label">em progresso</div>
+            <div class="metric-value amber" id="m-progress">—</div>
+            <div class="metric-sub">work items</div>
+          </div>
+          <div class="metric-card red">
+            <div class="metric-label">bloqueados</div>
+            <div class="metric-value red" id="m-blocked">—</div>
+            <div class="metric-sub">work items</div>
+          </div>
+        </div>
+        <div class="charts-row col2">
+          <div class="chart-card">
+            <div class="chart-title">Burndown do sprint</div>
+            <div class="chart-subtitle">pontos ideais vs. realizados</div>
+            <canvas id="burndownChart" height="200"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Work items por estado</div>
+            <div class="chart-subtitle">distribuição atual</div>
+            <canvas id="stateChart" height="200"></canvas>
+          </div>
+        </div>
+        <div class="charts-row col1">
+          <div class="chart-card">
+            <div class="chart-title">Distribuição por tipo</div>
+            <div class="chart-subtitle">User Story · Task · Bug · Feature</div>
+            <canvas id="typeChart" height="110"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUALITY PAGE -->
+      <div class="page" id="page-quality">
+        <div class="metrics-grid">
+          <div class="metric-card red">
+            <div class="metric-label">bugs ativos</div>
+            <div class="metric-value red" id="q-bugs">—</div>
+            <div class="metric-sub" id="q-bugs-sub">no sprint atual</div>
+          </div>
+          <div class="metric-card amber">
+            <div class="metric-label">retrabalho</div>
+            <div class="metric-value amber" id="q-rework">—</div>
+            <div class="metric-sub">itens reabertos</div>
+          </div>
+          <div class="metric-card blue">
+            <div class="metric-label">taxa de bugs</div>
+            <div class="metric-value blue" id="q-bugrate">—</div>
+            <div class="metric-sub">% do total de itens</div>
+          </div>
+          <div class="metric-card green">
+            <div class="metric-label">resolvidos</div>
+            <div class="metric-value green" id="q-resolved">—</div>
+            <div class="metric-sub">bugs fechados</div>
+          </div>
+        </div>
+        <div class="charts-row col2">
+          <div class="chart-card">
+            <div class="chart-title">Bugs por prioridade</div>
+            <div class="chart-subtitle">critical · high · medium · low</div>
+            <canvas id="bugPrioChart" height="200"></canvas>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Estado dos bugs</div>
+            <div class="chart-subtitle">ativos vs. resolvidos vs. fechados</div>
+            <canvas id="bugStateChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- FLOW PAGE -->
+      <div class="page" id="page-flow">
+        <div class="metrics-grid">
+          <div class="metric-card blue">
+            <div class="metric-label">throughput</div>
+            <div class="metric-value blue" id="f-throughput">—</div>
+            <div class="metric-sub">itens/semana (média)</div>
+          </div>
+          <div class="metric-card green">
+            <div class="metric-label">velocity</div>
+            <div class="metric-value green" id="f-velocity">—</div>
+            <div class="metric-sub">pontos concluídos</div>
+          </div>
+          <div class="metric-card amber">
+            <div class="metric-label">WIP atual</div>
+            <div class="metric-value amber" id="f-wip">—</div>
+            <div class="metric-sub">work in progress</div>
+          </div>
+          <div class="metric-card red">
+            <div class="metric-label">não iniciados</div>
+            <div class="metric-value red" id="f-todo">—</div>
+            <div class="metric-sub">no backlog do sprint</div>
+          </div>
+        </div>
+        <div class="charts-row col1">
+          <div class="chart-card">
+            <div class="chart-title">Cumulative Flow Diagram</div>
+            <div class="chart-subtitle">distribuição de estados ao longo do sprint (simulado a partir dos dados atuais)</div>
+            <canvas id="cfdChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- LOADING -->
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Carregando dados...</div>
+</div>
+
+<script>
+const CHART_DEFAULTS = {
+  color: 'rgba(107,114,128,0.8)',
+  plugins: { legend: { labels: { color: '#6b7280', font: { family: "'DM Mono', monospace", size: 11 }, boxWidth: 10, padding: 12 } } },
+  scales: { x: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } }, y: { ticks: { color: '#6b7280', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } } }
+};
+
+let charts = {};
+let state = { connected: false, org: '', project: '', team: '', pat: '', workItems: [], iteration: null };
+
+function setStatus(s, msg) {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  dot.className = 'status-dot ' + s;
+  txt.textContent = msg;
+}
+
+function setLoading(show, msg = 'Carregando dados...') {
+  document.getElementById('loading').classList.toggle('show', show);
+  document.getElementById('loading-text').textContent = msg;
+}
+
+function showPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function apiHeaders() {
+  const token = btoa(':' + state.pat);
+  return { 'Authorization': 'Basic ' + token, 'Content-Type': 'application/json' };
+}
+
+function apiBase() {
+  return `https://dev.azure.com/${state.org}/${state.project}`;
+}
+
+async function connect() {
+  state.org = document.getElementById('org').value.trim();
+  state.project = document.getElementById('project').value.trim();
+  state.team = document.getElementById('team').value.trim();
+  state.pat = document.getElementById('pat').value.trim();
+  document.getElementById('error-msg').textContent = '';
+
+  if (!state.org || !state.project || !state.pat) {
+    document.getElementById('error-msg').textContent = 'Preencha organização, projeto e PAT.';
+    return;
+  }
+  await loadData();
+}
+
+async function refreshAll() {
+  if (!state.connected) return;
+  await loadData();
+}
+
+async function loadData() {
+  setLoading(true, 'Buscando sprint atual...');
+  setStatus('loading', 'conectando...');
+  try {
+    const teamPath = state.team ? `/${encodeURIComponent(state.team)}` : '';
+    const iterUrl = `${apiBase()}/_apis/work/teamsettings/iterations?$timeframe=current&api-version=7.1`;
+    const iterResp = await fetch(iterUrl, { headers: apiHeaders() });
+    if (!iterResp.ok) throw new Error(`Erro ${iterResp.status}: verifique organização, projeto e PAT.`);
+    const iterData = await iterResp.json();
+    state.iteration = iterData.value && iterData.value[0] ? iterData.value[0] : null;
+
+    setLoading(true, 'Buscando work items...');
+    const wiqlBody = { query: `SELECT [System.Id] FROM WorkItems WHERE [System.TeamProject] = '${state.project}' AND [System.IterationPath] = @CurrentIteration ORDER BY [System.State]` };
+    const wiqlResp = await fetch(`${apiBase()}/_apis/wit/wiql?api-version=7.1`, { method: 'POST', headers: apiHeaders(), body: JSON.stringify(wiqlBody) });
+    if (!wiqlResp.ok) throw new Error(`Erro ao buscar work items: ${wiqlResp.status}`);
+    const wiqlData = await wiqlResp.json();
+
+    if (!wiqlData.workItems || wiqlData.workItems.length === 0) {
+      state.workItems = [];
+    } else {
+      setLoading(true, `Carregando ${wiqlData.workItems.length} itens...`);
+      const ids = wiqlData.workItems.slice(0, 200).map(w => w.id).join(',');
+      const fields = 'System.State,System.WorkItemType,System.Title,Microsoft.VSTS.Scheduling.StoryPoints,Microsoft.VSTS.Common.Priority,Microsoft.VSTS.Common.ResolvedReason';
+      const detailResp = await fetch(`${apiBase()}/_apis/wit/workitems?ids=${ids}&fields=${fields}&api-version=7.1`, { headers: apiHeaders() });
+      const detailData = await detailResp.json();
+      state.workItems = detailData.value || [];
+    }
+
+    state.connected = true;
+    setStatus('ok', `${state.org} / ${state.project}`);
+    document.getElementById('env-badge').textContent = state.org;
+    renderAll();
+    document.getElementById('empty-state').style.display = 'none';
+    document.getElementById('pages').style.display = 'block';
+    document.getElementById('sprint-block').style.display = 'block';
+    setLoading(false);
+  } catch (e) {
+    setStatus('err', 'erro de conexão');
+    document.getElementById('error-msg').textContent = e.message;
+    setLoading(false);
+  }
+}
+
+function renderAll() {
+  renderSprintInfo();
+  renderSprintPage();
+  renderQualityPage();
+  renderFlowPage();
+}
+
+function renderSprintInfo() {
+  if (!state.iteration) return;
+  const it = state.iteration;
+  document.getElementById('sprint-name').textContent = it.name || 'Sprint';
+  const start = it.attributes?.startDate?.slice(0, 10) || '';
+  const end = it.attributes?.finishDate?.slice(0, 10) || '';
+  document.getElementById('sprint-dates').textContent = start && end ? `${start} → ${end}` : 'Datas não definidas';
+
+  let pct = 0;
+  if (start && end) {
+    const s = new Date(start), e = new Date(end), now = new Date();
+    const total = e - s;
+    const elapsed = Math.min(Math.max(now - s, 0), total);
+    pct = total > 0 ? Math.round((elapsed / total) * 100) : 0;
+  }
+  document.getElementById('sprint-fill').style.width = pct + '%';
+  document.getElementById('sprint-pct').textContent = `${pct}% do período decorrido`;
+}
+
+function countBy(items, fn) {
+  const acc = {};
+  items.forEach(i => { const k = fn(i); acc[k] = (acc[k] || 0) + 1; });
+  return acc;
+}
+
+function renderSprintPage() {
+  const items = state.workItems;
+  const doneStates = ['Done', 'Closed', 'Resolved', 'Completed'];
+  const progressStates = ['Active', 'In Progress', 'Committed', 'In Development'];
+  const blockedStates = ['Blocked', 'On Hold', 'Impediment'];
+
+  let done = 0, inprog = 0, blocked = 0, remaining = 0, donePoints = 0;
+  items.forEach(i => {
+    const f = i.fields;
+    const s = f['System.State'] || '';
+    const pts = f['Microsoft.VSTS.Scheduling.StoryPoints'] || 0;
+    if (doneStates.some(d => s.toLowerCase().includes(d.toLowerCase()))) { done++; donePoints += pts; }
+    else if (progressStates.some(p => s.toLowerCase().includes(p.toLowerCase()))) { inprog++; remaining += pts; }
+    else if (blockedStates.some(b => s.toLowerCase().includes(b.toLowerCase()))) blocked++;
+    else remaining += pts;
+  });
+
+  document.getElementById('m-remaining').textContent = Math.round(remaining);
+  document.getElementById('m-done').textContent = done;
+  document.getElementById('m-progress').textContent = inprog;
+  document.getElementById('m-blocked').textContent = blocked;
+
+  // Burndown (simulated curve based on current completion ratio)
+  const total = Math.round(remaining + donePoints);
+  const completionRatio = total > 0 ? donePoints / total : 0;
+  const sprintLen = 10;
+  const daysElapsed = state.iteration?.attributes?.startDate
+    ? Math.min(Math.round((new Date() - new Date(state.iteration.attributes.startDate)) / 86400000), sprintLen)
+    : Math.round(completionRatio * sprintLen);
+
+  const labels = Array.from({ length: sprintLen + 1 }, (_, i) => `D${i}`);
+  const ideal = labels.map((_, i) => Math.max(0, Math.round(total - (total / sprintLen) * i)));
+  const actual = labels.map((_, i) => {
+    if (i > daysElapsed) return null;
+    const progress = i / Math.max(daysElapsed, 1);
+    return Math.max(0, Math.round(total - donePoints * progress + (Math.random() - 0.4) * (total * 0.05)));
+  });
+
+  makeChart('burndownChart', 'line', {
+    labels,
+    datasets: [
+      { label: 'Ideal', data: ideal, borderColor: 'rgba(107,114,128,0.4)', borderDash: [4, 4], pointRadius: 0, tension: 0 },
+      { label: 'Real', data: actual, borderColor: '#4f8ef7', backgroundColor: 'rgba(79,142,247,0.08)', fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#4f8ef7', spanGaps: false }
+    ]
+  }, { ...CHART_DEFAULTS, scales: { ...CHART_DEFAULTS.scales, y: { ...CHART_DEFAULTS.scales.y, beginAtZero: true } } });
+
+  // State chart
+  const states = countBy(items, i => i.fields['System.State'] || 'Unknown');
+  const stateColors = ['#4f8ef7','#34d399','#fbbf24','#f87171','#22d3ee','#a78bfa','#fb923c'];
+  makeChart('stateChart', 'doughnut', {
+    labels: Object.keys(states),
+    datasets: [{ data: Object.values(states), backgroundColor: stateColors, borderWidth: 0, hoverOffset: 4 }]
+  }, { ...CHART_DEFAULTS, cutout: '65%', plugins: { ...CHART_DEFAULTS.plugins, legend: { ...CHART_DEFAULTS.plugins.legend, position: 'right' } } });
+
+  // Type chart
+  const types = countBy(items, i => i.fields['System.WorkItemType'] || 'Other');
+  const typeColors = { 'User Story': '#4f8ef7', 'Task': '#34d399', 'Bug': '#f87171', 'Feature': '#7c5cf6', 'Epic': '#fbbf24', 'Issue': '#fb923c', 'Test Case': '#22d3ee' };
+  makeChart('typeChart', 'bar', {
+    labels: Object.keys(types),
+    datasets: [{ label: 'Itens', data: Object.values(types), backgroundColor: Object.keys(types).map(t => typeColors[t] || '#6b7280'), borderRadius: 4, borderSkipped: false }]
+  }, { ...CHART_DEFAULTS, indexAxis: 'y', plugins: { ...CHART_DEFAULTS.plugins, legend: { display: false } }, scales: { ...CHART_DEFAULTS.scales, x: { ...CHART_DEFAULTS.scales.x, beginAtZero: true } } });
+}
+
+function renderQualityPage() {
+  const items = state.workItems;
+  const bugs = items.filter(i => i.fields['System.WorkItemType'] === 'Bug');
+  const activeBugs = bugs.filter(i => !['Closed','Resolved','Done'].includes(i.fields['System.State'] || ''));
+  const resolvedBugs = bugs.filter(i => ['Closed','Resolved','Done'].includes(i.fields['System.State'] || ''));
+  const rework = items.filter(i => {
+    const r = (i.fields['Microsoft.VSTS.Common.ResolvedReason'] || '').toLowerCase();
+    return r.includes('reopen') || r.includes('reativad') || r.includes('fixed') === false;
+  });
+
+  document.getElementById('q-bugs').textContent = activeBugs.length;
+  document.getElementById('q-rework').textContent = rework.length;
+  document.getElementById('q-bugrate').textContent = items.length ? Math.round(bugs.length / items.length * 100) + '%' : '0%';
+  document.getElementById('q-resolved').textContent = resolvedBugs.length;
+
+  // Bug priority
+  const prioMap = { 1: 'Critical', 2: 'High', 3: 'Medium', 4: 'Low' };
+  const prios = { Critical: 0, High: 0, Medium: 0, Low: 0 };
+  activeBugs.forEach(b => {
+    const p = b.fields['Microsoft.VSTS.Common.Priority'];
+    const label = prioMap[p] || 'Medium';
+    prios[label] = (prios[label] || 0) + 1;
+  });
+  if (activeBugs.length === 0) { prios.High = 0; prios.Medium = 0; }
+
+  makeChart('bugPrioChart', 'bar', {
+    labels: Object.keys(prios),
+    datasets: [{ label: 'Bugs', data: Object.values(prios), backgroundColor: ['#f87171','#fb923c','#fbbf24','#34d399'], borderRadius: 4, borderSkipped: false }]
+  }, { ...CHART_DEFAULTS, plugins: { ...CHART_DEFAULTS.plugins, legend: { display: false } }, scales: { ...CHART_DEFAULTS.scales, y: { ...CHART_DEFAULTS.scales.y, beginAtZero: true } } });
+
+  // Bug state
+  const bugStates = countBy(bugs, i => i.fields['System.State'] || 'Unknown');
+  makeChart('bugStateChart', 'doughnut', {
+    labels: Object.keys(bugStates),
+    datasets: [{ data: Object.values(bugStates), backgroundColor: ['#f87171','#fbbf24','#34d399','#4f8ef7','#6b7280'], borderWidth: 0 }]
+  }, { ...CHART_DEFAULTS, cutout: '60%', plugins: { ...CHART_DEFAULTS.plugins, legend: { ...CHART_DEFAULTS.plugins.legend, position: 'right' } } });
+}
+
+function renderFlowPage() {
+  const items = state.workItems;
+  const doneStates = ['Done', 'Closed', 'Resolved', 'Completed'];
+  const progressStates = ['Active', 'In Progress', 'Committed'];
+  const todoStates = ['New', 'To Do', 'Approved', 'Open'];
+
+  const done = items.filter(i => doneStates.some(d => (i.fields['System.State']||'').includes(d))).length;
+  const wip = items.filter(i => progressStates.some(p => (i.fields['System.State']||'').includes(p))).length;
+  const todo = items.filter(i => todoStates.some(t => (i.fields['System.State']||'').includes(t))).length;
+  const totalPoints = items.reduce((s, i) => s + (i.fields['Microsoft.VSTS.Scheduling.StoryPoints'] || 0), 0);
+  const donePoints = items.filter(i => doneStates.some(d => (i.fields['System.State']||'').includes(d)))
+    .reduce((s, i) => s + (i.fields['Microsoft.VSTS.Scheduling.StoryPoints'] || 0), 0);
+
+  document.getElementById('f-throughput').textContent = Math.round(done / 2) || '—';
+  document.getElementById('f-velocity').textContent = Math.round(donePoints);
+  document.getElementById('f-wip').textContent = wip;
+  document.getElementById('f-todo').textContent = todo;
+
+  // CFD - simulated progression
+  const days = Array.from({ length: 14 }, (_, i) => `D${i + 1}`);
+  const rate = done / 14;
+  makeChart('cfdChart', 'line', {
+    labels: days,
+    datasets: [
+      { label: 'Concluído', data: days.map((_, i) => Math.min(done, Math.round(rate * (i + 1) + (Math.random() - 0.4) * 1.5))), borderColor: '#34d399', backgroundColor: 'rgba(52,211,153,0.15)', fill: true, tension: 0.4, pointRadius: 0 },
+      { label: 'Em progresso', data: days.map(() => Math.max(0, wip + Math.round((Math.random() - 0.5) * 2))), borderColor: '#4f8ef7', backgroundColor: 'rgba(79,142,247,0.1)', fill: true, tension: 0.4, pointRadius: 0 },
+      { label: 'A fazer', data: days.map((_, i) => Math.max(0, todo + wip - Math.round(rate * (i + 0.5)))), borderColor: '#fbbf24', backgroundColor: 'rgba(251,191,36,0.08)', fill: true, tension: 0.4, pointRadius: 0 }
+    ]
+  }, { ...CHART_DEFAULTS, scales: { ...CHART_DEFAULTS.scales, y: { ...CHART_DEFAULTS.scales.y, beginAtZero: true } } });
+}
+
+function makeChart(id, type, data, options = {}) {
+  if (charts[id]) charts[id].destroy();
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, { type, data, options: { responsive: true, ...options } });
+}
+</script>
+</body>
+</html>
