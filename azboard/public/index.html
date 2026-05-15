@@ -563,8 +563,20 @@ function apiBase() {
   return `https://dev.azure.com/${state.org}/${state.project}`;
 }
 
+function cleanOrg(val) {
+  val = val.trim();
+  try {
+    if (val.startsWith('http')) {
+      const parts = new URL(val).pathname.replace(/^\//, '').split('/');
+      return parts[0] || val;
+    }
+  } catch(e) {}
+  return val.replace(/^\/+|\/+$/g, '');
+}
+
 async function connect() {
-  state.org = document.getElementById('org').value.trim();
+  state.org = cleanOrg(document.getElementById('org').value);
+  document.getElementById('org').value = state.org;
   state.project = document.getElementById('project').value.trim();
   state.team = document.getElementById('team').value.trim();
   state.pat = document.getElementById('pat').value.trim();
