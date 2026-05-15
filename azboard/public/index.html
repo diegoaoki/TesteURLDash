@@ -556,7 +556,8 @@ function apiHeaders() {
 
 function proxyUrl(azPath, extraParams = {}) {
   const params = new URLSearchParams({ org: state.org, path: azPath, ...extraParams });
-  return `/api/proxy?${params.toString()}`;
+  const base = window.location.pathname.split('/').slice(0, 2).join('/');
+  return `${base}/api/proxy?${params.toString()}`;
 }
 
 function apiBase() {
