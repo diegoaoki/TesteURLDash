@@ -117,6 +117,12 @@
     opacity: 0.6;
     margin-right: 1px;
   }
+
+  /* ── Abas ── */
+  .tabs { display: flex; gap: 2px; margin-bottom: 20px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tab-btn { background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-dim); padding: 12px 22px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; margin-bottom: -1px; transition: color 0.15s, border-color 0.15s; }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -127,6 +133,21 @@
 </header>
 
 <main>
+
+  <div id="status" class="status"></div>
+
+  <div id="empty" class="empty">
+    <h2>Carregando dados...</h2>
+    <p>Aguarde, buscando todos os endpoints em paralelo.</p>
+  </div>
+
+  <nav class="tabs" id="tabNav" style="display:none;">
+    <button type="button" class="tab-btn active" data-tab="overview">Visão Geral</button>
+    <button type="button" class="tab-btn" data-tab="sla">SLA de Atendimento · Analistas</button>
+  </nav>
+
+  <!-- ===================== ABA: VISÃO GERAL ===================== -->
+  <div id="tab-overview" class="tab-panel">
 
   <div class="filters">
     <div>
@@ -147,13 +168,6 @@
       <label>Total na sele&ccedil;&atilde;o</label>
       <strong id="kSelectedCount" style="font-size: 16px; color: var(--accent);">—</strong>
     </div>
-  </div>
-
-  <div id="status" class="status"></div>
-
-  <div id="empty" class="empty">
-    <h2>Carregando dados...</h2>
-    <p>Aguarde, buscando todos os endpoints em paralelo.</p>
   </div>
 
   <div id="results" style="display:none;">
@@ -326,6 +340,59 @@
     </div>
 
   </div>
+  </div><!-- /tab-overview -->
+
+  <!-- ===================== ABA: SLA DE ATENDIMENTO · ANALISTAS ===================== -->
+  <div id="tab-sla" class="tab-panel" style="display:none;">
+
+    <div class="filters">
+      <div>
+        <label>Mês (abertura)</label>
+        <select id="slaMonth"><option value="">—</option></select>
+      </div>
+      <div>
+        <label>Grupo</label>
+        <select id="slaGroup"><option value="all">Todos os grupos</option></select>
+      </div>
+      <div class="spacer"></div>
+      <div>
+        <label>Resumo</label>
+        <strong id="slaCount" style="font-size: 14px; color: var(--accent);">—</strong>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><h3>Tickets no período</h3><div class="val" id="slaKpiTotal">—</div><div class="sub" id="slaKpiTotalSub"></div></div>
+      <div class="kpi ok"><h3>SLA de atendimento</h3><div class="val" id="slaKpiPct">—</div><div class="sub" id="slaKpiPctSub">1º toque dentro do prazo</div></div>
+      <div class="kpi"><h3>Analistas</h3><div class="val" id="slaKpiAnalysts">—</div><div class="sub">com tickets no período</div></div>
+      <div class="kpi warn"><h3>Aguardando 1º atend.</h3><div class="val" id="slaKpiPending">—</div><div class="sub">ainda dentro do prazo</div></div>
+    </div>
+
+    <div class="card" style="margin-bottom: 18px;">
+      <h2>SLA de 1º atendimento por analista (% no prazo)</h2>
+      <div class="chart-wrap tall"><canvas id="chSlaAnalysts"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Analistas · SLA de 1º atendimento <span id="slaTableHint" style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;">(primeiro_toque vs. prazo_atendimento)</span></h2>
+      <div class="scroll-y" style="max-height: 600px;">
+        <table>
+          <thead><tr>
+            <th>Analista</th>
+            <th class="num">Tickets</th>
+            <th class="num">No prazo</th>
+            <th class="num">Estourado</th>
+            <th class="num">Aguardando</th>
+            <th class="num">Sem SLA</th>
+            <th class="num">TTA médio</th>
+            <th class="num">SLA %</th>
+          </tr></thead>
+          <tbody id="tblSlaAnalysts"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-sla -->
 
 </main>
 
@@ -492,6 +559,8 @@ async function loadAll() {
     renderAll();
     $('empty').style.display = 'none';
     $('results').style.display = 'block';
+    $('tabNav').style.display = 'flex';
+    if ($('tab-sla').style.display !== 'none') initSlaTab();
     setStatus(`✓ ${state.tickets.length} tickets carregados · ${state.groups.length} grupos`, 'ok');
     updateLastUpdate();
   } catch (err) {
@@ -1096,6 +1165,168 @@ $('tblStatus').addEventListener('change', () => $('tblSearch').dispatchEvent(new
 $('tblSla').addEventListener('change', () => $('tblSearch').dispatchEvent(new Event('input')));
 $('tblSort').addEventListener('change', () => $('tblSearch').dispatchEvent(new Event('input')));
 $('btnReload').addEventListener('click', loadAll);
+
+// ============================================================================
+// ABA: SLA DE ATENDIMENTO POR ANALISTA
+// "SLA de atendimento" = 1º toque (primeiro_toque) dentro do prazo_atendimento
+// ============================================================================
+const slaState = { month: null, group: 'all' };
+const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+function monthKey(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+function monthLabel(key) {
+  const [y, m] = key.split('-').map(Number);
+  return MESES_PT[m - 1] + '/' + y;
+}
+
+// Classifica o SLA de 1º atendimento de um ticket
+function computeSlaAtendimento(t) {
+  const prazo = parseDate(t.prazo_atendimento);
+  if (!prazo) return 'SEM_SLA';
+  const ft = parseDate(t.primeiro_toque);
+  if (ft) return ft <= prazo ? 'NO_PRAZO' : 'ESTOURADO';
+  // ainda sem 1º toque
+  return new Date() > prazo ? 'ESTOURADO' : 'AGUARDANDO';
+}
+
+// (Re)popula os filtros da aba e renderiza, preservando a seleção atual
+function initSlaTab() {
+  // Meses disponíveis (pela data de abertura)
+  const monthsSet = new Set();
+  state.tickets.forEach(t => { const d = parseDate(t.abertura); if (d) monthsSet.add(monthKey(d)); });
+  const months = [...monthsSet].sort().reverse();
+  const selM = $('slaMonth');
+  const prevM = slaState.month;
+  selM.innerHTML = months.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('')
+    || '<option value="">Sem dados</option>';
+  slaState.month = (prevM && months.includes(prevM)) ? prevM : (months[0] || null);
+  if (slaState.month) selM.value = slaState.month;
+
+  // Grupos com tickets
+  const groupsWithTickets = new Set(state.tickets.map(t => t.grupo_id));
+  const groups = state.groups.filter(g => groupsWithTickets.has(g.id))
+    .sort((a, b) => (b.total_tickets || 0) - (a.total_tickets || 0));
+  const selG = $('slaGroup');
+  const prevG = slaState.group;
+  selG.innerHTML = '<option value="all">Todos os grupos</option>' +
+    groups.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('');
+  slaState.group = (prevG === 'all' || groups.some(g => String(g.id) === String(prevG))) ? prevG : 'all';
+  selG.value = String(slaState.group);
+
+  renderSlaAnalysts();
+}
+
+function renderSlaAnalysts() {
+  const month = slaState.month;
+  const group = slaState.group;
+
+  // Filtra tickets por mês (abertura) e grupo
+  const tickets = state.tickets.filter(t => {
+    const d = parseDate(t.abertura);
+    if (!d || (month && monthKey(d) !== month)) return false;
+    if (group !== 'all' && Number(t.grupo_id) !== Number(group)) return false;
+    return true;
+  });
+  const ticketById = Object.fromEntries(tickets.map(t => [t.id, t]));
+  const ticketIds = new Set(tickets.map(t => t.id));
+  const tecnicos = state.tecnicos.filter(x => ticketIds.has(x.ticket_id));
+
+  // Agrega por técnico/analista
+  const map = {};
+  tecnicos.forEach(x => {
+    const t = ticketById[x.ticket_id];
+    if (!t) return;
+    if (!map[x.tecnico_id]) map[x.tecnico_id] = { nome: x.tecnico, total: 0, noPrazo: 0, estourado: 0, aguardando: 0, semSla: 0, ttas: [] };
+    const m = map[x.tecnico_id];
+    m.total++;
+    const sla = computeSlaAtendimento(t);
+    if (sla === 'NO_PRAZO') m.noPrazo++;
+    else if (sla === 'ESTOURADO') m.estourado++;
+    else if (sla === 'AGUARDANDO') m.aguardando++;
+    else m.semSla++;
+    const tta = diffHours(parseDate(t.abertura), parseDate(t.primeiro_toque));
+    if (tta !== null) m.ttas.push(tta);
+  });
+
+  const rows = Object.entries(map).map(([id, m]) => {
+    const base = m.noPrazo + m.estourado; // tickets com SLA já "decidido"
+    return {
+      id, nome: m.nome, total: m.total,
+      noPrazo: m.noPrazo, estourado: m.estourado, aguardando: m.aguardando, semSla: m.semSla,
+      slaPct: base ? (m.noPrazo / base * 100) : null,
+      ttaAvg: m.ttas.length ? m.ttas.reduce((s, v) => s + v, 0) / m.ttas.length : null,
+    };
+  }).sort((a, b) => b.total - a.total);
+
+  // KPIs gerais do período/grupo
+  let gNoPrazo = 0, gEstourado = 0, gAguardando = 0, gSemSla = 0;
+  tickets.forEach(t => {
+    const s = computeSlaAtendimento(t);
+    if (s === 'NO_PRAZO') gNoPrazo++;
+    else if (s === 'ESTOURADO') gEstourado++;
+    else if (s === 'AGUARDANDO') gAguardando++;
+    else gSemSla++;
+  });
+  const gBase = gNoPrazo + gEstourado;
+  $('slaKpiTotal').textContent = tickets.length.toLocaleString('pt-BR');
+  $('slaKpiTotalSub').textContent = gSemSla ? gSemSla + ' sem SLA definido' : '';
+  $('slaKpiPct').textContent = gBase ? (gNoPrazo / gBase * 100).toFixed(1) + '%' : '—';
+  $('slaKpiPctSub').textContent = gNoPrazo + ' no prazo · ' + gEstourado + ' estourados';
+  $('slaKpiAnalysts').textContent = rows.length.toLocaleString('pt-BR');
+  $('slaKpiPending').textContent = gAguardando.toLocaleString('pt-BR');
+  $('slaCount').textContent = `· ${rows.length} analistas · ${tickets.length} tickets`;
+
+  // Gráfico: SLA% por analista (top 15 por volume, só os com SLA decidido)
+  if (charts.slaAnalysts) { charts.slaAnalysts.destroy(); delete charts.slaAnalysts; }
+  const chartRows = rows.filter(r => r.slaPct !== null).slice(0, 15);
+  if (chartRows.length) {
+    charts.slaAnalysts = new Chart($('chSlaAnalysts'), {
+      type: 'bar',
+      data: { labels: chartRows.map(r => r.nome), datasets: [{
+        label: 'SLA %', data: chartRows.map(r => +r.slaPct.toFixed(1)),
+        backgroundColor: chartRows.map(r => r.slaPct >= 90 ? '#06d6a0' : r.slaPct >= 70 ? '#ffd166' : '#ef476f'),
+        borderRadius: 4
+      }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ctx.raw + '% no prazo' } } },
+        scales: { x: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } }
+      }
+    });
+  }
+
+  // Tabela
+  if (rows.length === 0) {
+    $('tblSlaAnalysts').innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:30px;">Nenhum ticket para o filtro selecionado</td></tr>';
+    return;
+  }
+  $('tblSlaAnalysts').innerHTML = rows.map(r => {
+    const pctTxt = r.slaPct === null ? '—' : r.slaPct.toFixed(0) + '%';
+    const pctCls = r.slaPct === null ? '' : r.slaPct >= 90 ? 'sla-ok' : r.slaPct >= 70 ? 's2' : 'sla-bad';
+    return `<tr>
+      <td>${escapeHtml(r.nome)}</td>
+      <td class="num">${r.total}</td>
+      <td class="num" style="color:var(--ok)">${r.noPrazo}</td>
+      <td class="num" style="color:var(--bad)">${r.estourado}</td>
+      <td class="num">${r.aguardando}</td>
+      <td class="num">${r.semSla}</td>
+      <td class="num">${formatDuration(r.ttaAvg)}</td>
+      <td class="num"><span class="pill ${pctCls}">${pctTxt}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// Troca de abas
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  $('tab-overview').style.display = name === 'overview' ? 'block' : 'none';
+  $('tab-sla').style.display = name === 'sla' ? 'block' : 'none';
+  // (re)inicializa a aba SLA quando fica visível (canvas precisa estar visível p/ dimensionar)
+  if (name === 'sla' && state.tickets.length) initSlaTab();
+}
+document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+$('slaMonth').addEventListener('change', e => { slaState.month = e.target.value; renderSlaAnalysts(); });
+$('slaGroup').addEventListener('change', e => { slaState.group = e.target.value; renderSlaAnalysts(); });
 
 document.addEventListener('DOMContentLoaded', loadAll);
 </script>
