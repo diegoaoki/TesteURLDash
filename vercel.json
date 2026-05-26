@@ -1,6 +1,6 @@
 {
   "functions": {
-    "azboard/api/proxy.js": {
+    "api/glpi.js": {
       "memory": 128,
       "maxDuration": 10
     }
