@@ -163,6 +163,18 @@
         <option value="30">30 dias</option>
       </select>
     </div>
+    <div>
+      <label>Abertura · de</label>
+      <input type="date" id="filterDateFrom" style="min-width: 150px;">
+    </div>
+    <div>
+      <label>Abertura · até</label>
+      <input type="date" id="filterDateTo" style="min-width: 150px;">
+    </div>
+    <div>
+      <button type="button" class="refresh-btn" id="btnDateToday" title="Filtrar apenas tickets abertos hoje">Hoje</button>
+      <button type="button" class="refresh-btn" id="btnDateClear" title="Remover filtro de data" style="margin-left: 6px;">Limpar</button>
+    </div>
     <div class="spacer"></div>
     <div>
       <label>Total na sele&ccedil;&atilde;o</label>
@@ -444,6 +456,8 @@ const state = {
   categorias: {},       // Q09 id->nome
   entidades: {},        // Q10 id->nome
   selectedGroup: null,
+  dateFrom: null,      // Date (início do dia) ou null
+  dateTo: null,        // Date (fim do dia) ou null
   lastUpdate: null,
 };
 
@@ -489,6 +503,19 @@ function formatDateOnly(d) {
 }
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function inDateRange(t) {
+  if (!state.dateFrom && !state.dateTo) return true;
+  const d = parseDate(t.abertura);
+  if (!d) return false;
+  if (state.dateFrom && d < state.dateFrom) return false;
+  if (state.dateTo && d > state.dateTo) return false;
+  return true;
+}
+// Tickets do grupo selecionado já filtrados pelo intervalo de datas (abertura)
+function getSelectedTickets() {
+  const groupId = Number(state.selectedGroup);
+  return state.tickets.filter(t => Number(t.grupo_id) === groupId && inDateRange(t));
 }
 function isTicketOpen(status) { return ![5, 6].includes(Number(status)); }
 function isInProgress(status) { return [2, 3].includes(Number(status)); }
@@ -596,8 +623,7 @@ function populateGroupDropdown() {
 // ============================================================================
 function renderAll() {
   destroyCharts();
-  const groupId = Number(state.selectedGroup);
-  const tickets = state.tickets.filter(t => Number(t.grupo_id) === groupId);
+  const tickets = getSelectedTickets();
   const ticketIds = new Set(tickets.map(t => t.id));
 
   // Sub-conjuntos filtrados por ticketIds
@@ -1152,10 +1178,33 @@ $('filterGroup').addEventListener('change', (e) => {
   renderAll();
 });
 $('filterPendingDays').addEventListener('change', () => renderAll());
+
+// ---- Filtro de data (por data de abertura) ----
+function syncDateState() {
+  const f = $('filterDateFrom').value; // 'YYYY-MM-DD' ou ''
+  const t = $('filterDateTo').value;
+  state.dateFrom = f ? new Date(+f.slice(0,4), +f.slice(5,7)-1, +f.slice(8,10), 0, 0, 0, 0) : null;
+  state.dateTo   = t ? new Date(+t.slice(0,4), +t.slice(5,7)-1, +t.slice(8,10), 23, 59, 59, 999) : null;
+}
+$('filterDateFrom').addEventListener('change', () => { syncDateState(); renderAll(); });
+$('filterDateTo').addEventListener('change', () => { syncDateState(); renderAll(); });
+$('btnDateToday').addEventListener('click', () => {
+  const now = new Date();
+  const iso = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  $('filterDateFrom').value = iso;
+  $('filterDateTo').value = iso;
+  syncDateState();
+  renderAll();
+});
+$('btnDateClear').addEventListener('click', () => {
+  $('filterDateFrom').value = '';
+  $('filterDateTo').value = '';
+  syncDateState();
+  renderAll();
+});
 $('tblSearch').addEventListener('input', () => {
   // re-render só a tabela (mais leve)
-  const groupId = Number(state.selectedGroup);
-  const tickets = state.tickets.filter(t => Number(t.grupo_id) === groupId);
+  const tickets = getSelectedTickets();
   const ticketIds = new Set(tickets.map(t => t.id));
   const tecnicos = state.tecnicos.filter(x => ticketIds.has(x.ticket_id));
   const requerentes = state.requerentes.filter(x => ticketIds.has(x.ticket_id));
