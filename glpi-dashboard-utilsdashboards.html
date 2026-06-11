@@ -1490,7 +1490,11 @@ const TECH_COLS = [
   { key: 'tmr2a8',      label: 'TMR 2–8h',    align: 'num' },
   { key: 'tmr8a24',     label: 'TMR 8–24h',   align: 'num' },
   { key: 'tmrGt24',     label: 'TMR >24h',    align: 'num' },
-  { key: 'tta',         label: 'TTA médio',   align: 'num' },
+  { key: 'tta',         label: 'TMA médio',   align: 'num' },
+  { key: 'tmaLt2',      label: 'TMA <2h',     align: 'num' },
+  { key: 'tma2a8',      label: 'TMA 2–8h',    align: 'num' },
+  { key: 'tma8a24',     label: 'TMA 8–24h',   align: 'num' },
+  { key: 'tmaGt24',     label: 'TMA >24h',    align: 'num' },
   { key: 'slaAtend',    label: 'SLA atend.',  align: 'num' },
   { key: 'slaSol',      label: 'SLA solução', align: 'num' },
   { key: 'reaberturas', label: 'Reaberturas', align: 'num' },
@@ -1576,10 +1580,12 @@ function renderTechAnalysis() {
   };
   let rows = Object.entries(map).map(([id, m]) => {
     const bp = bandPcts(m.ttrs);
+    const ba = bandPcts(m.ttas);
     return {
       id, nome: m.nome, total: m.total, abertos: m.abertos, fechados: m.fechados,
       tmr: avg(m.ttrs), tta: avg(m.ttas),
       tmrLt2: bp.lt2, tmr2a8: bp.b2a8, tmr8a24: bp.b8a24, tmrGt24: bp.gt24,
+      tmaLt2: ba.lt2, tma2a8: ba.b2a8, tma8a24: ba.b8a24, tmaGt24: ba.gt24,
       slaAtend: m.atendBase ? m.atendOk / m.atendBase * 100 : null,
       slaSol: m.solBase ? m.solOk / m.solBase * 100 : null,
       reaberturas: m.reaberturas,
@@ -1628,6 +1634,10 @@ function renderTechAnalysis() {
       case 'tmr8a24':    return bandPill(r.tmr8a24, 's2');
       case 'tmrGt24':    return bandPill(r.tmrGt24, 'sla-bad');
       case 'tta':        return formatDuration(r.tta);
+      case 'tmaLt2':     return bandPill(r.tmaLt2, 'sla-ok');
+      case 'tma2a8':     return bandPill(r.tma2a8, 'sla-ok');
+      case 'tma8a24':    return bandPill(r.tma8a24, 's2');
+      case 'tmaGt24':    return bandPill(r.tmaGt24, 'sla-bad');
       case 'slaAtend':   return `<span class="pill ${pctCls(r.slaAtend)}">${fmtPct(r.slaAtend)}</span>`;
       case 'slaSol':     return `<span class="pill ${pctCls(r.slaSol)}">${fmtPct(r.slaSol)}</span>`;
       case 'satisfacao': return r.satisfacao === null ? '—' : r.satisfacao.toFixed(2);
@@ -1651,10 +1661,12 @@ function renderTechAnalysis() {
     for (const v of m.notas) g.notas.push(v);
   });
   const gbp = bandPcts(g.ttrs);
+  const gba = bandPcts(g.ttas);
   const geralRow = {
     nome: 'TOTAL GERAL', total: g.total, abertos: g.abertos, fechados: g.fechados,
     tmr: avg(g.ttrs), tta: avg(g.ttas),
     tmrLt2: gbp.lt2, tmr2a8: gbp.b2a8, tmr8a24: gbp.b8a24, tmrGt24: gbp.gt24,
+    tmaLt2: gba.lt2, tma2a8: gba.b2a8, tma8a24: gba.b8a24, tmaGt24: gba.gt24,
     slaAtend: g.atendBase ? g.atendOk / g.atendBase * 100 : null,
     slaSol: g.solBase ? g.solOk / g.solBase * 100 : null,
     reaberturas: g.reaberturas, satisfacao: avg(g.notas),
@@ -1666,7 +1678,7 @@ function renderTechAnalysis() {
 function exportTechCsv() {
   const rows = techState._rows || [];
   if (!rows.length) return;
-  const header = ['Técnico', 'Total', 'Em aberto', 'Fechados', 'TMR (h)', 'TMR <2h %', 'TMR 2-8h %', 'TMR 8-24h %', 'TMR >24h %', 'TTA (h)', 'SLA atend. %', 'SLA solução %', 'Reaberturas', 'Satisfação'];
+  const header = ['Técnico', 'Total', 'Em aberto', 'Fechados', 'TMR (h)', 'TMR <2h %', 'TMR 2-8h %', 'TMR 8-24h %', 'TMR >24h %', 'TMA (h)', 'TMA <2h %', 'TMA 2-8h %', 'TMA 8-24h %', 'TMA >24h %', 'SLA atend. %', 'SLA solução %', 'Reaberturas', 'Satisfação'];
   const num = (v, d) => v === null || v === undefined ? '' : v.toFixed(d).replace('.', ',');
   const esc = v => {
     const s = (v === null || v === undefined) ? '' : String(v);
@@ -1675,7 +1687,8 @@ function exportTechCsv() {
   const lines = rows.map(r => [
     r.nome, r.total, r.abertos, r.fechados,
     num(r.tmr, 1), num(r.tmrLt2, 1), num(r.tmr2a8, 1), num(r.tmr8a24, 1), num(r.tmrGt24, 1),
-    num(r.tta, 1), num(r.slaAtend, 1), num(r.slaSol, 1),
+    num(r.tta, 1), num(r.tmaLt2, 1), num(r.tma2a8, 1), num(r.tma8a24, 1), num(r.tmaGt24, 1),
+    num(r.slaAtend, 1), num(r.slaSol, 1),
     r.reaberturas, num(r.satisfacao, 2),
   ].map(esc).join(';'));
   const csv = '﻿' + [header.join(';'), ...lines].join('\r\n');
@@ -1706,7 +1719,11 @@ const COMP_METRICS = {
   tmr2a8:      { label: '% TMR entre 2 e 8h',   kind: 'pct',    agg: 'ratio' },
   tmr8a24:     { label: '% TMR entre 8 e 24h',  kind: 'pct',    agg: 'ratio' },
   tmrGt24:     { label: '% TMR > 24h',          kind: 'pct',    agg: 'ratio' },
-  tta:         { label: 'TTA médio',            kind: 'dur',    agg: 'avg' },
+  tta:         { label: 'TMA médio',            kind: 'dur',    agg: 'avg' },
+  tmaLt2:      { label: '% TMA < 2h',           kind: 'pct',    agg: 'ratio' },
+  tma2a8:      { label: '% TMA entre 2 e 8h',   kind: 'pct',    agg: 'ratio' },
+  tma8a24:     { label: '% TMA entre 8 e 24h',  kind: 'pct',    agg: 'ratio' },
+  tmaGt24:     { label: '% TMA > 24h',          kind: 'pct',    agg: 'ratio' },
   reaberturas: { label: 'Reaberturas',          kind: 'int',    agg: 'sum' },
   satisfacao:  { label: 'Satisfação média',     kind: 'rating', agg: 'avg' },
 };
@@ -1714,6 +1731,7 @@ const COMP_METRICS = {
 function compEmptyBucket() {
   return { total: 0, abertos: 0, fechados: 0, ttrSum: 0, ttrN: 0,
            tmrLt2: 0, tmr2a8: 0, tmr8a24: 0, tmrGt24: 0, ttaSum: 0, ttaN: 0,
+           tmaLt2: 0, tma2a8: 0, tma8a24: 0, tmaGt24: 0,
            atendOk: 0, atendBase: 0, solOk: 0, solBase: 0, reab: 0, notaSum: 0, notaN: 0 };
 }
 function compAccumulate(b, t) {
@@ -1725,7 +1743,10 @@ function compAccumulate(b, t) {
     if (ttr < 2) b.tmrLt2++; else if (ttr <= 8) b.tmr2a8++; else if (ttr <= 24) b.tmr8a24++; else b.tmrGt24++;
   }
   const tta = diffHours(parseDate(t.abertura), parseDate(t.primeiro_toque));
-  if (tta !== null) { b.ttaSum += tta; b.ttaN++; }
+  if (tta !== null) {
+    b.ttaSum += tta; b.ttaN++;
+    if (tta < 2) b.tmaLt2++; else if (tta <= 8) b.tma2a8++; else if (tta <= 24) b.tma8a24++; else b.tmaGt24++;
+  }
   const sa = computeSlaAtendimento(t);
   if (sa === 'NO_PRAZO' || sa === 'ESTOURADO') { b.atendBase++; if (sa === 'NO_PRAZO') b.atendOk++; }
   const ss = computeSlaTtr(t);
@@ -1753,6 +1774,10 @@ function compValue(b, metric) {
     case 'tmr8a24':     return b.ttrN ? b.tmr8a24 / b.ttrN * 100 : null;
     case 'tmrGt24':     return b.ttrN ? b.tmrGt24 / b.ttrN * 100 : null;
     case 'tta':         return b.ttaN ? b.ttaSum / b.ttaN : null;
+    case 'tmaLt2':      return b.ttaN ? b.tmaLt2 / b.ttaN * 100 : null;
+    case 'tma2a8':      return b.ttaN ? b.tma2a8 / b.ttaN * 100 : null;
+    case 'tma8a24':     return b.ttaN ? b.tma8a24 / b.ttaN * 100 : null;
+    case 'tmaGt24':     return b.ttaN ? b.tmaGt24 / b.ttaN * 100 : null;
     case 'satisfacao':  return b.notaN ? b.notaSum / b.notaN : null;
     case 'slaAtend':    return b.atendBase ? b.atendOk / b.atendBase * 100 : null;
     case 'slaSol':      return b.solBase ? b.solOk / b.solBase * 100 : null;
