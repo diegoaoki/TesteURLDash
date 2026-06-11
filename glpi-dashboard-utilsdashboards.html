@@ -439,6 +439,7 @@
         <table>
           <thead id="tblTechHead"></thead>
           <tbody id="tblTechBody"></tbody>
+          <tfoot id="tblTechFoot"></tfoot>
         </table>
       </div>
     </div>
@@ -481,6 +482,7 @@
         <table>
           <thead id="compHead"></thead>
           <tbody id="compBody"></tbody>
+          <tfoot id="compFoot"></tfoot>
         </table>
       </div>
     </div>
@@ -1610,18 +1612,21 @@ function renderTechAnalysis() {
   // Corpo
   if (rows.length === 0) {
     $('tblTechBody').innerHTML = `<tr><td colspan="${TECH_COLS.length}" style="text-align:center;color:var(--text-dim);padding:30px;">Nenhum chamado para o filtro selecionado</td></tr>`;
+    $('tblTechFoot').innerHTML = '';
     return;
   }
   const fmtPct = v => v === null ? '—' : v.toFixed(0) + '%';
   const pctCls = v => v === null ? '' : v >= 90 ? 'sla-ok' : v >= 70 ? 's2' : 'sla-bad';
+  // Faixas de TMR: cor fixa por faixa (rápidas verde, lentas vermelho)
+  const bandPill = (v, cls) => v === null ? '—' : `<span class="pill ${cls}">${v.toFixed(0)}%</span>`;
   const cell = (c, r) => {
     switch (c.key) {
       case 'nome':       return escapeHtml(r.nome);
       case 'tmr':        return formatDuration(r.tmr);
-      case 'tmrLt2':     return fmtPct(r.tmrLt2);
-      case 'tmr2a8':     return fmtPct(r.tmr2a8);
-      case 'tmr8a24':    return fmtPct(r.tmr8a24);
-      case 'tmrGt24':    return fmtPct(r.tmrGt24);
+      case 'tmrLt2':     return bandPill(r.tmrLt2, 'sla-ok');
+      case 'tmr2a8':     return bandPill(r.tmr2a8, 'sla-ok');
+      case 'tmr8a24':    return bandPill(r.tmr8a24, 's2');
+      case 'tmrGt24':    return bandPill(r.tmrGt24, 'sla-bad');
       case 'tta':        return formatDuration(r.tta);
       case 'slaAtend':   return `<span class="pill ${pctCls(r.slaAtend)}">${fmtPct(r.slaAtend)}</span>`;
       case 'slaSol':     return `<span class="pill ${pctCls(r.slaSol)}">${fmtPct(r.slaSol)}</span>`;
@@ -1632,6 +1637,30 @@ function renderTechAnalysis() {
   $('tblTechBody').innerHTML = rows.map(r =>
     '<tr>' + TECH_COLS.map(c => `<td class="${c.align}">${cell(c, r)}</td>`).join('') + '</tr>'
   ).join('');
+
+  // Linha "Total geral" consolidando todos os técnicos (médias/% ponderadas)
+  const g = { total: 0, abertos: 0, fechados: 0, ttrs: [], ttas: [],
+              atendOk: 0, atendBase: 0, solOk: 0, solBase: 0, reaberturas: 0, notas: [] };
+  Object.values(map).forEach(m => {
+    g.total += m.total; g.abertos += m.abertos; g.fechados += m.fechados;
+    for (const v of m.ttrs) g.ttrs.push(v);
+    for (const v of m.ttas) g.ttas.push(v);
+    g.atendOk += m.atendOk; g.atendBase += m.atendBase;
+    g.solOk += m.solOk; g.solBase += m.solBase;
+    g.reaberturas += m.reaberturas;
+    for (const v of m.notas) g.notas.push(v);
+  });
+  const gbp = bandPcts(g.ttrs);
+  const geralRow = {
+    nome: 'TOTAL GERAL', total: g.total, abertos: g.abertos, fechados: g.fechados,
+    tmr: avg(g.ttrs), tta: avg(g.ttas),
+    tmrLt2: gbp.lt2, tmr2a8: gbp.b2a8, tmr8a24: gbp.b8a24, tmrGt24: gbp.gt24,
+    slaAtend: g.atendBase ? g.atendOk / g.atendBase * 100 : null,
+    slaSol: g.solBase ? g.solOk / g.solBase * 100 : null,
+    reaberturas: g.reaberturas, satisfacao: avg(g.notas),
+  };
+  $('tblTechFoot').innerHTML = '<tr style="font-weight:700;border-top:2px solid var(--border,#2a3a52);">' +
+    TECH_COLS.map(c => `<td class="${c.align}" style="position:sticky;bottom:0;background:var(--card);">${cell(c, geralRow)}</td>`).join('') + '</tr>';
 }
 
 function exportTechCsv() {
@@ -1670,8 +1699,8 @@ const COMP_METRICS = {
   total:       { label: 'Total de chamados',    kind: 'int',    agg: 'sum' },
   abertos:     { label: 'Em aberto',            kind: 'int',    agg: 'sum' },
   fechados:    { label: 'Fechados',             kind: 'int',    agg: 'sum' },
-  slaAtend:    { label: 'SLA de atendimento %', kind: 'pct',    agg: 'ratio' },
-  slaSol:      { label: 'SLA de solução %',     kind: 'pct',    agg: 'ratio' },
+  slaAtend:    { label: 'SLA de atendimento %', kind: 'pct',    agg: 'ratio', colorBySla: true },
+  slaSol:      { label: 'SLA de solução %',     kind: 'pct',    agg: 'ratio', colorBySla: true },
   tmr:         { label: 'TMR médio',            kind: 'dur',    agg: 'avg' },
   tmrLt2:      { label: '% TMR < 2h',           kind: 'pct',    agg: 'ratio' },
   tmr2a8:      { label: '% TMR entre 2 e 8h',   kind: 'pct',    agg: 'ratio' },
@@ -1818,15 +1847,18 @@ function renderCompMonthly() {
 
   if (!sorted.length) {
     $('compBody').innerHTML = `<tr><td colspan="${months.length + 2}" style="text-align:center;color:var(--text-dim);padding:30px;">Nenhum chamado para o filtro selecionado</td></tr>`;
+    $('compFoot').innerHTML = '';
     if (charts.comp) { charts.comp.destroy(); delete charts.comp; }
     return;
   }
 
+  // Cor verde/amarelo/vermelho só faz sentido onde "maior é melhor" (SLA).
+  // Faixas de TMR e demais métricas ficam neutras.
   const pctCls = v => v === null ? '' : v >= 90 ? 'sla-ok' : v >= 70 ? 's2' : 'sla-bad';
   const cellHtml = b => {
     const v = compValue(b, metric);
     const txt = compFmt(v, cfg.kind);
-    if (cfg.kind === 'pct') return `<span class="pill ${pctCls(v)}">${txt}</span>`;
+    if (cfg.kind === 'pct') return `<span class="pill ${cfg.colorBySla ? pctCls(v) : ''}">${txt}</span>`;
     return txt;
   };
 
@@ -1835,6 +1867,23 @@ function renderCompMonthly() {
     const geral = `<td class="num" style="border-left:1px solid var(--border,#2a3a52);font-weight:600;">${cellHtml(rec.geral)}</td>`;
     return `<tr><td style="position:sticky;left:0;background:var(--card);z-index:1;">${escapeHtml(rec.nome)}</td>${cells}${geral}</tr>`;
   }).join('');
+
+  // Linha "Total geral": soma de todos os analistas por mês (+ Geral)
+  const totalByMonth = {};
+  months.forEach(mk => totalByMonth[mk] = compEmptyBucket());
+  const grand = compEmptyBucket();
+  for (const [, rec] of sorted) {
+    for (const mk in rec.buckets) {
+      const src = rec.buckets[mk], dst = totalByMonth[mk];
+      for (const k in dst) dst[k] += src[k];
+    }
+    for (const k in grand) grand[k] += rec.geral[k];
+  }
+  $('compFoot').innerHTML = '<tr style="font-weight:700;border-top:2px solid var(--border,#2a3a52);">' +
+    `<td style="position:sticky;left:0;background:var(--card);z-index:1;">TOTAL GERAL</td>` +
+    months.map(mk => `<td class="num">${cellHtml(totalByMonth[mk])}</td>`).join('') +
+    `<td class="num" style="border-left:1px solid var(--border,#2a3a52);">${cellHtml(grand)}</td>` +
+    '</tr>';
 
   // Gráfico: top 8 analistas por volume, métrica selecionada ao longo dos meses
   if (charts.comp) { charts.comp.destroy(); delete charts.comp; }
