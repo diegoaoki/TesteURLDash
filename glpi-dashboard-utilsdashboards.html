@@ -144,6 +144,7 @@
   <nav class="tabs" id="tabNav" style="display:none;">
     <button type="button" class="tab-btn active" data-tab="overview">Visão Geral</button>
     <button type="button" class="tab-btn" data-tab="sla">SLA de Atendimento · Analistas</button>
+    <button type="button" class="tab-btn" data-tab="tech">Análise por Técnico</button>
   </nav>
 
   <!-- ===================== ABA: VISÃO GERAL ===================== -->
@@ -406,6 +407,43 @@
 
   </div><!-- /tab-sla -->
 
+  <!-- ===================== ABA: ANÁLISE POR TÉCNICO ===================== -->
+  <div id="tab-tech" class="tab-panel" style="display:none;">
+
+    <div class="filters">
+      <div>
+        <label>Mês (abertura)</label>
+        <select id="techMonth"><option value="">—</option></select>
+      </div>
+      <div>
+        <label>Grupo</label>
+        <select id="techGroup"><option value="all">Todos os grupos</option></select>
+      </div>
+      <div class="spacer"></div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="button" class="refresh-btn" id="techExport" title="Baixar a tabela em CSV">⬇ Exportar CSV</button>
+      </div>
+      <div>
+        <label>Resumo</label>
+        <strong id="techCount" style="font-size: 14px; color: var(--accent);">—</strong>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Análise comparativa por técnico
+        <span style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;">(técnico atribuído · clique no cabeçalho para ordenar)</span>
+      </h2>
+      <div class="scroll-y" style="max-height: 640px;">
+        <table>
+          <thead id="tblTechHead"></thead>
+          <tbody id="tblTechBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-tech -->
+
 </main>
 
 <script>
@@ -588,6 +626,7 @@ async function loadAll() {
     $('results').style.display = 'block';
     $('tabNav').style.display = 'flex';
     if ($('tab-sla').style.display !== 'none') initSlaTab();
+    if ($('tab-tech').style.display !== 'none') initTechTab();
     setStatus(`✓ ${state.tickets.length} tickets carregados · ${state.groups.length} grupos`, 'ok');
     updateLastUpdate();
   } catch (err) {
@@ -1389,17 +1428,196 @@ function renderSlaAnalysts() {
   }).join('');
 }
 
+// ============================================================================
+// ABA: ANÁLISE POR TÉCNICO (tabela comparativa, filtros próprios de mês/grupo)
+// Considera só o técnico ATRIBUÍDO (principal) de cada chamado.
+// ============================================================================
+const techState = { month: null, group: 'all', sortKey: 'total', sortDir: 'desc', _rows: [] };
+
+const TECH_COLS = [
+  { key: 'nome',        label: 'Técnico',     align: '' },
+  { key: 'total',       label: 'Total',       align: 'num' },
+  { key: 'abertos',     label: 'Em aberto',   align: 'num' },
+  { key: 'fechados',    label: 'Fechados',    align: 'num' },
+  { key: 'tmr',         label: 'TMR médio',   align: 'num' },
+  { key: 'tta',         label: 'TTA médio',   align: 'num' },
+  { key: 'slaAtend',    label: 'SLA atend.',  align: 'num' },
+  { key: 'slaSol',      label: 'SLA solução', align: 'num' },
+  { key: 'reaberturas', label: 'Reaberturas', align: 'num' },
+  { key: 'satisfacao',  label: 'Satisfação',  align: 'num' },
+];
+
+function initTechTab() {
+  // Meses disponíveis (pela data de abertura)
+  const monthsSet = new Set();
+  state.tickets.forEach(t => { const d = parseDate(t.abertura); if (d) monthsSet.add(monthKey(d)); });
+  const months = [...monthsSet].sort().reverse();
+  const selM = $('techMonth');
+  const prevM = techState.month;
+  selM.innerHTML = months.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('')
+    || '<option value="">Sem dados</option>';
+  techState.month = (prevM && months.includes(prevM)) ? prevM : (months[0] || null);
+  if (techState.month) selM.value = techState.month;
+
+  // Grupos com tickets
+  const groupsWithTickets = new Set(state.tickets.map(t => t.grupo_id));
+  const groups = state.groups.filter(g => groupsWithTickets.has(g.id))
+    .sort((a, b) => (b.total_tickets || 0) - (a.total_tickets || 0));
+  const selG = $('techGroup');
+  const prevG = techState.group;
+  selG.innerHTML = '<option value="all">Todos os grupos</option>' +
+    groups.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('');
+  techState.group = (prevG === 'all' || groups.some(g => String(g.id) === String(prevG))) ? prevG : 'all';
+  selG.value = String(techState.group);
+
+  renderTechAnalysis();
+}
+
+function renderTechAnalysis() {
+  const { month, group, sortKey, sortDir } = techState;
+
+  // Filtra tickets por mês (abertura) e grupo
+  const tickets = state.tickets.filter(t => {
+    const d = parseDate(t.abertura);
+    if (!d || (month && monthKey(d) !== month)) return false;
+    if (group !== 'all' && Number(t.grupo_id) !== Number(group)) return false;
+    return true;
+  });
+  const ticketById = Object.fromEntries(tickets.map(t => [t.id, t]));
+  const ticketIds = new Set(tickets.map(t => t.id));
+  const tecnicos = state.tecnicos.filter(x => ticketIds.has(x.ticket_id));
+  const assigned = assignedTechByTicket(tickets, tecnicos);
+
+  // Agrega por técnico atribuído
+  const map = {};
+  for (const ticketId in assigned) {
+    const x = assigned[ticketId];
+    const t = ticketById[ticketId];
+    if (!t) continue;
+    if (!map[x.tecnico_id]) map[x.tecnico_id] = {
+      nome: x.tecnico, total: 0, abertos: 0, fechados: 0, ttrs: [], ttas: [],
+      atendOk: 0, atendBase: 0, solOk: 0, solBase: 0, reaberturas: 0, notas: [],
+    };
+    const m = map[x.tecnico_id];
+    m.total++;
+    if (isTicketOpen(t.status)) m.abertos++; else m.fechados++;
+    const ttr = diffHours(parseDate(t.abertura), parseDate(t.solucao));
+    if (ttr !== null) m.ttrs.push(ttr);
+    const tta = diffHours(parseDate(t.abertura), parseDate(t.primeiro_toque));
+    if (tta !== null) m.ttas.push(tta);
+    const sa = computeSlaAtendimento(t);
+    if (sa === 'NO_PRAZO' || sa === 'ESTOURADO') { m.atendBase++; if (sa === 'NO_PRAZO') m.atendOk++; }
+    const ss = computeSlaTtr(t);
+    if (ss !== 'SEM_SLA') { m.solBase++; if (ss === 'NO_PRAZO') m.solOk++; }
+    const reab = state.reaberturas[t.id];
+    if (reab) m.reaberturas += (reab.qtd_reaberturas || 0);
+    const sat = state.satisfacao[t.id];
+    if (sat && sat.nota != null) m.notas.push(Number(sat.nota));
+  }
+
+  const avg = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+  let rows = Object.entries(map).map(([id, m]) => ({
+    id, nome: m.nome, total: m.total, abertos: m.abertos, fechados: m.fechados,
+    tmr: avg(m.ttrs), tta: avg(m.ttas),
+    slaAtend: m.atendBase ? m.atendOk / m.atendBase * 100 : null,
+    slaSol: m.solBase ? m.solOk / m.solBase * 100 : null,
+    reaberturas: m.reaberturas,
+    satisfacao: avg(m.notas),
+  }));
+
+  // Ordenação (nulos sempre no fim, independente da direção)
+  const dir = sortDir === 'asc' ? 1 : -1;
+  rows.sort((a, b) => {
+    const va = a[sortKey], vb = b[sortKey];
+    if (va === null || va === undefined) return 1;
+    if (vb === null || vb === undefined) return -1;
+    if (typeof va === 'string') return va.localeCompare(vb, 'pt-BR') * dir;
+    return (va - vb) * dir;
+  });
+  techState._rows = rows;
+
+  // Resumo
+  const totalTickets = rows.reduce((s, r) => s + r.total, 0);
+  $('techCount').textContent = `· ${rows.length} técnicos · ${totalTickets.toLocaleString('pt-BR')} chamados atribuídos`;
+
+  // Cabeçalho com indicador de ordenação
+  $('tblTechHead').innerHTML = '<tr>' + TECH_COLS.map(c => {
+    const arrow = c.key === sortKey ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    const cls = (c.align ? c.align + ' ' : '') + 'th-sort';
+    return `<th class="${cls}" data-sort="${c.key}" style="cursor:pointer;user-select:none;white-space:nowrap;">${c.label}${arrow}</th>`;
+  }).join('') + '</tr>';
+
+  // Corpo
+  if (rows.length === 0) {
+    $('tblTechBody').innerHTML = `<tr><td colspan="${TECH_COLS.length}" style="text-align:center;color:var(--text-dim);padding:30px;">Nenhum chamado para o filtro selecionado</td></tr>`;
+    return;
+  }
+  const fmtPct = v => v === null ? '—' : v.toFixed(0) + '%';
+  const pctCls = v => v === null ? '' : v >= 90 ? 'sla-ok' : v >= 70 ? 's2' : 'sla-bad';
+  const cell = (c, r) => {
+    switch (c.key) {
+      case 'nome':       return escapeHtml(r.nome);
+      case 'tmr':        return formatDuration(r.tmr);
+      case 'tta':        return formatDuration(r.tta);
+      case 'slaAtend':   return `<span class="pill ${pctCls(r.slaAtend)}">${fmtPct(r.slaAtend)}</span>`;
+      case 'slaSol':     return `<span class="pill ${pctCls(r.slaSol)}">${fmtPct(r.slaSol)}</span>`;
+      case 'satisfacao': return r.satisfacao === null ? '—' : r.satisfacao.toFixed(2);
+      default:           return r[c.key];
+    }
+  };
+  $('tblTechBody').innerHTML = rows.map(r =>
+    '<tr>' + TECH_COLS.map(c => `<td class="${c.align}">${cell(c, r)}</td>`).join('') + '</tr>'
+  ).join('');
+}
+
+function exportTechCsv() {
+  const rows = techState._rows || [];
+  if (!rows.length) return;
+  const header = ['Técnico', 'Total', 'Em aberto', 'Fechados', 'TMR (h)', 'TTA (h)', 'SLA atend. %', 'SLA solução %', 'Reaberturas', 'Satisfação'];
+  const num = (v, d) => v === null || v === undefined ? '' : v.toFixed(d).replace('.', ',');
+  const esc = v => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = rows.map(r => [
+    r.nome, r.total, r.abertos, r.fechados,
+    num(r.tmr, 1), num(r.tta, 1), num(r.slaAtend, 1), num(r.slaSol, 1),
+    r.reaberturas, num(r.satisfacao, 2),
+  ].map(esc).join(';'));
+  const csv = '﻿' + [header.join(';'), ...lines].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `analise-tecnicos-${techState.month || 'todos'}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // Troca de abas
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   $('tab-overview').style.display = name === 'overview' ? 'block' : 'none';
   $('tab-sla').style.display = name === 'sla' ? 'block' : 'none';
+  $('tab-tech').style.display = name === 'tech' ? 'block' : 'none';
   // (re)inicializa a aba SLA quando fica visível (canvas precisa estar visível p/ dimensionar)
   if (name === 'sla' && state.tickets.length) initSlaTab();
+  if (name === 'tech' && state.tickets.length) initTechTab();
 }
 document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 $('slaMonth').addEventListener('change', e => { slaState.month = e.target.value; renderSlaAnalysts(); });
 $('slaGroup').addEventListener('change', e => { slaState.group = e.target.value; renderSlaAnalysts(); });
+$('techMonth').addEventListener('change', e => { techState.month = e.target.value; renderTechAnalysis(); });
+$('techGroup').addEventListener('change', e => { techState.group = e.target.value; renderTechAnalysis(); });
+$('techExport').addEventListener('click', exportTechCsv);
+$('tblTechHead').addEventListener('click', e => {
+  const th = e.target.closest('th[data-sort]');
+  if (!th) return;
+  const key = th.dataset.sort;
+  if (techState.sortKey === key) techState.sortDir = techState.sortDir === 'asc' ? 'desc' : 'asc';
+  else { techState.sortKey = key; techState.sortDir = key === 'nome' ? 'asc' : 'desc'; }
+  renderTechAnalysis();
+});
 
 document.addEventListener('DOMContentLoaded', loadAll);
 </script>
