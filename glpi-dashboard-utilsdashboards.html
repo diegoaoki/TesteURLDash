@@ -1484,6 +1484,7 @@ const TECH_COLS = [
   { key: 'abertos',     label: 'Em aberto',   align: 'num' },
   { key: 'fechados',    label: 'Fechados',    align: 'num' },
   { key: 'tmr',         label: 'TMR médio',   align: 'num' },
+  { key: 'tmr2a8',      label: 'TMR 2–8h',    align: 'num' },
   { key: 'tta',         label: 'TTA médio',   align: 'num' },
   { key: 'slaAtend',    label: 'SLA atend.',  align: 'num' },
   { key: 'slaSol',      label: 'SLA solução', align: 'num' },
@@ -1563,6 +1564,7 @@ function renderTechAnalysis() {
   let rows = Object.entries(map).map(([id, m]) => ({
     id, nome: m.nome, total: m.total, abertos: m.abertos, fechados: m.fechados,
     tmr: avg(m.ttrs), tta: avg(m.ttas),
+    tmr2a8: m.ttrs.length ? m.ttrs.filter(h => h >= 2 && h <= 8).length / m.ttrs.length * 100 : null,
     slaAtend: m.atendBase ? m.atendOk / m.atendBase * 100 : null,
     slaSol: m.solBase ? m.solOk / m.solBase * 100 : null,
     reaberturas: m.reaberturas,
@@ -1602,6 +1604,7 @@ function renderTechAnalysis() {
     switch (c.key) {
       case 'nome':       return escapeHtml(r.nome);
       case 'tmr':        return formatDuration(r.tmr);
+      case 'tmr2a8':     return fmtPct(r.tmr2a8);
       case 'tta':        return formatDuration(r.tta);
       case 'slaAtend':   return `<span class="pill ${pctCls(r.slaAtend)}">${fmtPct(r.slaAtend)}</span>`;
       case 'slaSol':     return `<span class="pill ${pctCls(r.slaSol)}">${fmtPct(r.slaSol)}</span>`;
@@ -1617,7 +1620,7 @@ function renderTechAnalysis() {
 function exportTechCsv() {
   const rows = techState._rows || [];
   if (!rows.length) return;
-  const header = ['Técnico', 'Total', 'Em aberto', 'Fechados', 'TMR (h)', 'TTA (h)', 'SLA atend. %', 'SLA solução %', 'Reaberturas', 'Satisfação'];
+  const header = ['Técnico', 'Total', 'Em aberto', 'Fechados', 'TMR (h)', 'TMR 2-8h %', 'TTA (h)', 'SLA atend. %', 'SLA solução %', 'Reaberturas', 'Satisfação'];
   const num = (v, d) => v === null || v === undefined ? '' : v.toFixed(d).replace('.', ',');
   const esc = v => {
     const s = (v === null || v === undefined) ? '' : String(v);
@@ -1625,7 +1628,7 @@ function exportTechCsv() {
   };
   const lines = rows.map(r => [
     r.nome, r.total, r.abertos, r.fechados,
-    num(r.tmr, 1), num(r.tta, 1), num(r.slaAtend, 1), num(r.slaSol, 1),
+    num(r.tmr, 1), num(r.tmr2a8, 1), num(r.tta, 1), num(r.slaAtend, 1), num(r.slaSol, 1),
     r.reaberturas, num(r.satisfacao, 2),
   ].map(esc).join(';'));
   const csv = '﻿' + [header.join(';'), ...lines].join('\r\n');
@@ -1652,20 +1655,21 @@ const COMP_METRICS = {
   slaAtend:    { label: 'SLA de atendimento %', kind: 'pct',    agg: 'ratio' },
   slaSol:      { label: 'SLA de solução %',     kind: 'pct',    agg: 'ratio' },
   tmr:         { label: 'TMR médio',            kind: 'dur',    agg: 'avg' },
+  tmr2a8:      { label: '% TMR entre 2 e 8h',   kind: 'pct',    agg: 'ratio' },
   tta:         { label: 'TTA médio',            kind: 'dur',    agg: 'avg' },
   reaberturas: { label: 'Reaberturas',          kind: 'int',    agg: 'sum' },
   satisfacao:  { label: 'Satisfação média',     kind: 'rating', agg: 'avg' },
 };
 
 function compEmptyBucket() {
-  return { total: 0, abertos: 0, fechados: 0, ttrSum: 0, ttrN: 0, ttaSum: 0, ttaN: 0,
+  return { total: 0, abertos: 0, fechados: 0, ttrSum: 0, ttrN: 0, tmr2a8: 0, ttaSum: 0, ttaN: 0,
            atendOk: 0, atendBase: 0, solOk: 0, solBase: 0, reab: 0, notaSum: 0, notaN: 0 };
 }
 function compAccumulate(b, t) {
   b.total++;
   if (isTicketOpen(t.status)) b.abertos++; else b.fechados++;
   const ttr = diffHours(parseDate(t.abertura), parseDate(t.solucao));
-  if (ttr !== null) { b.ttrSum += ttr; b.ttrN++; }
+  if (ttr !== null) { b.ttrSum += ttr; b.ttrN++; if (ttr >= 2 && ttr <= 8) b.tmr2a8++; }
   const tta = diffHours(parseDate(t.abertura), parseDate(t.primeiro_toque));
   if (tta !== null) { b.ttaSum += tta; b.ttaN++; }
   const sa = computeSlaAtendimento(t);
@@ -1690,6 +1694,7 @@ function compValue(b, metric) {
     case 'fechados':    return b.fechados;
     case 'reaberturas': return b.reab;
     case 'tmr':         return b.ttrN ? b.ttrSum / b.ttrN : null;
+    case 'tmr2a8':      return b.ttrN ? b.tmr2a8 / b.ttrN * 100 : null;
     case 'tta':         return b.ttaN ? b.ttaSum / b.ttaN : null;
     case 'satisfacao':  return b.notaN ? b.notaSum / b.notaN : null;
     case 'slaAtend':    return b.atendBase ? b.atendOk / b.atendBase * 100 : null;
