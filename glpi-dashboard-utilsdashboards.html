@@ -861,12 +861,42 @@ function renderWorkflow(workflow) {
 // ============================================================================
 // TABELAS
 // ============================================================================
+// ============================================================================
+// VÍNCULO DO TÉCNICO ATRIBUÍDO
+// A Q06 (CLD_TECNICOS) traz uma linha por (ticket, técnico, grupo). Um mesmo
+// técnico que pertence a vários grupos aparece repetido, e chamados atendidos
+// por mais de um grupo trazem também técnicos de outros grupos. Para refletir
+// "a quem o chamado está atribuído" consideramos só o técnico do MESMO grupo
+// do chamado; havendo mais de um técnico distinto nesse grupo, usa-se o
+// primeiro como atribuído principal. Assim cada chamado conta para um único
+// técnico (sem inflar contagens com vínculos repetidos/de outros grupos).
+// Retorna: { [ticket_id]: linha-da-Q06 (tecnico_id, tecnico, login, grupo_id) }
+function assignedTechByTicket(tickets, tecnicos) {
+  const grupoDoTicket = {};
+  tickets.forEach(t => { grupoDoTicket[t.id] = t.grupo_id; });
+
+  const linhasPorTicket = {};
+  tecnicos.forEach(x => { (linhasPorTicket[x.ticket_id] ??= []).push(x); });
+
+  const map = {};
+  for (const ticketId in linhasPorTicket) {
+    const linhas = linhasPorTicket[ticketId];
+    const g = grupoDoTicket[ticketId];
+    const mesmoGrupo = linhas.filter(r => r.grupo_id === g);
+    const pool = mesmoGrupo.length ? mesmoGrupo : linhas;
+    map[ticketId] = pool[0]; // atribuído principal
+  }
+  return map;
+}
+
 function renderTechTable(tickets, tecnicos) {
   const ticketById = Object.fromEntries(tickets.map(t => [t.id, t]));
+  const assigned = assignedTechByTicket(tickets, tecnicos);
   const map = {};
-  tecnicos.forEach(x => {
-    const t = ticketById[x.ticket_id];
-    if (!t) return;
+  for (const ticketId in assigned) {
+    const x = assigned[ticketId];
+    const t = ticketById[ticketId];
+    if (!t) continue;
     if (!map[x.tecnico_id]) map[x.tecnico_id] = { nome: x.tecnico, total: 0, closed: 0, ttrs: [], slaOk: 0, slaTotal: 0 };
     const m = map[x.tecnico_id];
     m.total++;
@@ -878,7 +908,7 @@ function renderTechTable(tickets, tecnicos) {
       m.slaTotal++;
       if (sla === 'NO_PRAZO') m.slaOk++;
     }
-  });
+  }
   const rows = Object.entries(map)
     .map(([id, m]) => ({ id, ...m, ttrAvg: m.ttrs.length ? m.ttrs.reduce((s,v) => s+v, 0) / m.ttrs.length : null }))
     .sort((a,b) => b.total - a.total)
@@ -1027,12 +1057,8 @@ function renderPendingTable(tickets, tecnicos, requerentes) {
   $('pendDaysLabel').textContent = minDays;
   const now = new Date();
 
-  // Indexar técnicos e requerentes por ticket
-  const techByTicket = {};
-  tecnicos.forEach(x => {
-    if (!techByTicket[x.ticket_id]) techByTicket[x.ticket_id] = [];
-    techByTicket[x.ticket_id].push(x.tecnico);
-  });
+  // Técnico atribuído (principal) e requerente por ticket
+  const assigned = assignedTechByTicket(tickets, tecnicos);
   const reqByTicket = {};
   requerentes.forEach(x => {
     if (!reqByTicket[x.ticket_id]) reqByTicket[x.ticket_id] = x.requerente;
@@ -1052,7 +1078,7 @@ function renderPendingTable(tickets, tecnicos, requerentes) {
         ...t,
         dias_aberto: Math.floor((now - d) / 86400000),
         dias_sem_atualizar: mod ? Math.floor((now - mod) / 86400000) : null,
-        techNames: (techByTicket[t.id] || []).join(', '),
+        techNames: assigned[t.id]?.tecnico || '—',
         reqName: reqByTicket[t.id] || '—',
       };
     })
@@ -1078,11 +1104,7 @@ function renderPendingTable(tickets, tecnicos, requerentes) {
 }
 
 function renderTicketsTable(tickets, tecnicos, requerentes) {
-  const techByTicket = {};
-  tecnicos.forEach(x => {
-    if (!techByTicket[x.ticket_id]) techByTicket[x.ticket_id] = [];
-    techByTicket[x.ticket_id].push(x.tecnico);
-  });
+  const assigned = assignedTechByTicket(tickets, tecnicos);
   const reqByTicket = {};
   requerentes.forEach(x => { if (!reqByTicket[x.ticket_id]) reqByTicket[x.ticket_id] = x.requerente; });
 
@@ -1103,7 +1125,7 @@ function renderTicketsTable(tickets, tecnicos, requerentes) {
       _ttr: diffHours(ab, sol),
       _days: ab ? Math.floor((now - ab) / 86400000) : null,
       _sla: computeSlaTtr(t),
-      _tech: (techByTicket[t.id] || []).join(', '),
+      _tech: assigned[t.id]?.tecnico || '',
       _req: reqByTicket[t.id] || '',
       _cat: state.categorias[t.categoria_id || 0] || '',
     };
@@ -1280,11 +1302,13 @@ function renderSlaAnalysts() {
   const ticketIds = new Set(tickets.map(t => t.id));
   const tecnicos = state.tecnicos.filter(x => ticketIds.has(x.ticket_id));
 
-  // Agrega por técnico/analista
+  // Agrega por técnico/analista — só o técnico atribuído (principal) de cada chamado
+  const assigned = assignedTechByTicket(tickets, tecnicos);
   const map = {};
-  tecnicos.forEach(x => {
-    const t = ticketById[x.ticket_id];
-    if (!t) return;
+  for (const ticketId in assigned) {
+    const x = assigned[ticketId];
+    const t = ticketById[ticketId];
+    if (!t) continue;
     if (!map[x.tecnico_id]) map[x.tecnico_id] = { nome: x.tecnico, total: 0, noPrazo: 0, estourado: 0, aguardando: 0, semSla: 0, ttas: [] };
     const m = map[x.tecnico_id];
     m.total++;
@@ -1295,7 +1319,7 @@ function renderSlaAnalysts() {
     else m.semSla++;
     const tta = diffHours(parseDate(t.abertura), parseDate(t.primeiro_toque));
     if (tta !== null) m.ttas.push(tta);
-  });
+  }
 
   const rows = Object.entries(map).map(([id, m]) => {
     const base = m.noPrazo + m.estourado; // tickets com SLA já "decidido"
