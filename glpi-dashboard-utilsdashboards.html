@@ -145,6 +145,7 @@
     <button type="button" class="tab-btn active" data-tab="overview">Visão Geral</button>
     <button type="button" class="tab-btn" data-tab="sla">SLA de Atendimento · Analistas</button>
     <button type="button" class="tab-btn" data-tab="tech">Análise por Técnico</button>
+    <button type="button" class="tab-btn" data-tab="comp">Comparativo Mensal</button>
   </nav>
 
   <!-- ===================== ABA: VISÃO GERAL ===================== -->
@@ -444,6 +445,48 @@
 
   </div><!-- /tab-tech -->
 
+  <!-- ===================== ABA: COMPARATIVO MENSAL POR ANALISTA ===================== -->
+  <div id="tab-comp" class="tab-panel" style="display:none;">
+
+    <div class="filters">
+      <div>
+        <label>Métrica</label>
+        <select id="compMetric"></select>
+      </div>
+      <div>
+        <label>Grupo</label>
+        <select id="compGroup"><option value="all">Todos os grupos</option></select>
+      </div>
+      <div class="spacer"></div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="button" class="refresh-btn" id="compExport" title="Baixar a tabela em CSV">⬇ Exportar CSV</button>
+      </div>
+      <div>
+        <label>Resumo</label>
+        <strong id="compCount" style="font-size: 14px; color: var(--accent);">—</strong>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 18px;">
+      <h2>Evolução mensal <span id="compChartHint" style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;">(top 8 analistas por volume)</span></h2>
+      <div class="chart-wrap tall"><canvas id="chComp"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Comparativo mês a mês por analista
+        <span style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;">(técnico atribuído · clique no nome da coluna não ordena; linhas ordenadas por volume)</span>
+      </h2>
+      <div class="scroll-y" style="max-height: 640px; overflow-x: auto;">
+        <table>
+          <thead id="compHead"></thead>
+          <tbody id="compBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-comp -->
+
 </main>
 
 <script>
@@ -627,6 +670,7 @@ async function loadAll() {
     $('tabNav').style.display = 'flex';
     if ($('tab-sla').style.display !== 'none') initSlaTab();
     if ($('tab-tech').style.display !== 'none') initTechTab();
+    if ($('tab-comp').style.display !== 'none') initCompTab();
     setStatus(`✓ ${state.tickets.length} tickets carregados · ${state.groups.length} grupos`, 'ok');
     updateLastUpdate();
   } catch (err) {
@@ -1594,15 +1638,244 @@ function exportTechCsv() {
   URL.revokeObjectURL(url);
 }
 
+// ============================================================================
+// ABA: COMPARATIVO MENSAL POR ANALISTA
+// Pivot: 1 linha por analista, 1 coluna por mês (+ coluna "Geral"). A métrica
+// exibida é escolhida no seletor. Considera só o técnico atribuído (principal).
+// ============================================================================
+const compState = { group: 'all', metric: 'total', _data: null, _sorted: [] };
+
+const COMP_METRICS = {
+  total:       { label: 'Total de chamados',    kind: 'int',    agg: 'sum' },
+  abertos:     { label: 'Em aberto',            kind: 'int',    agg: 'sum' },
+  fechados:    { label: 'Fechados',             kind: 'int',    agg: 'sum' },
+  slaAtend:    { label: 'SLA de atendimento %', kind: 'pct',    agg: 'ratio' },
+  slaSol:      { label: 'SLA de solução %',     kind: 'pct',    agg: 'ratio' },
+  tmr:         { label: 'TMR médio',            kind: 'dur',    agg: 'avg' },
+  tta:         { label: 'TTA médio',            kind: 'dur',    agg: 'avg' },
+  reaberturas: { label: 'Reaberturas',          kind: 'int',    agg: 'sum' },
+  satisfacao:  { label: 'Satisfação média',     kind: 'rating', agg: 'avg' },
+};
+
+function compEmptyBucket() {
+  return { total: 0, abertos: 0, fechados: 0, ttrSum: 0, ttrN: 0, ttaSum: 0, ttaN: 0,
+           atendOk: 0, atendBase: 0, solOk: 0, solBase: 0, reab: 0, notaSum: 0, notaN: 0 };
+}
+function compAccumulate(b, t) {
+  b.total++;
+  if (isTicketOpen(t.status)) b.abertos++; else b.fechados++;
+  const ttr = diffHours(parseDate(t.abertura), parseDate(t.solucao));
+  if (ttr !== null) { b.ttrSum += ttr; b.ttrN++; }
+  const tta = diffHours(parseDate(t.abertura), parseDate(t.primeiro_toque));
+  if (tta !== null) { b.ttaSum += tta; b.ttaN++; }
+  const sa = computeSlaAtendimento(t);
+  if (sa === 'NO_PRAZO' || sa === 'ESTOURADO') { b.atendBase++; if (sa === 'NO_PRAZO') b.atendOk++; }
+  const ss = computeSlaTtr(t);
+  if (ss !== 'SEM_SLA') { b.solBase++; if (ss === 'NO_PRAZO') b.solOk++; }
+  const reab = state.reaberturas[t.id];
+  if (reab) b.reab += (reab.qtd_reaberturas || 0);
+  const sat = state.satisfacao[t.id];
+  if (sat && sat.nota != null) { b.notaSum += Number(sat.nota); b.notaN++; }
+}
+function compCombine(buckets) {
+  const c = compEmptyBucket();
+  for (const mk in buckets) { const b = buckets[mk]; for (const k in c) c[k] += b[k]; }
+  return c;
+}
+function compValue(b, metric) {
+  if (!b) return null;
+  switch (metric) {
+    case 'total':       return b.total;
+    case 'abertos':     return b.abertos;
+    case 'fechados':    return b.fechados;
+    case 'reaberturas': return b.reab;
+    case 'tmr':         return b.ttrN ? b.ttrSum / b.ttrN : null;
+    case 'tta':         return b.ttaN ? b.ttaSum / b.ttaN : null;
+    case 'satisfacao':  return b.notaN ? b.notaSum / b.notaN : null;
+    case 'slaAtend':    return b.atendBase ? b.atendOk / b.atendBase * 100 : null;
+    case 'slaSol':      return b.solBase ? b.solOk / b.solBase * 100 : null;
+  }
+  return null;
+}
+function compFmt(v, kind) {
+  if (v === null || v === undefined) return '—';
+  if (kind === 'int')    return v.toLocaleString('pt-BR');
+  if (kind === 'dur')    return formatDuration(v);
+  if (kind === 'pct')    return v.toFixed(0) + '%';
+  if (kind === 'rating') return v.toFixed(2);
+  return String(v);
+}
+
+function initCompTab() {
+  // Seletor de métrica (uma única fonte: COMP_METRICS)
+  const selMetric = $('compMetric');
+  if (!selMetric.options.length) {
+    selMetric.innerHTML = Object.entries(COMP_METRICS)
+      .map(([k, m]) => `<option value="${k}">${m.label}</option>`).join('');
+  }
+  selMetric.value = compState.metric;
+
+  // Grupos com tickets
+  const groupsWithTickets = new Set(state.tickets.map(t => t.grupo_id));
+  const groups = state.groups.filter(g => groupsWithTickets.has(g.id))
+    .sort((a, b) => (b.total_tickets || 0) - (a.total_tickets || 0));
+  const selG = $('compGroup');
+  const prevG = compState.group;
+  selG.innerHTML = '<option value="all">Todos os grupos</option>' +
+    groups.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('');
+  compState.group = (prevG === 'all' || groups.some(g => String(g.id) === String(prevG))) ? prevG : 'all';
+  selG.value = String(compState.group);
+
+  buildCompMatrix();
+  renderCompMonthly();
+}
+
+// Monta a matriz analista × mês (componentes brutos) uma vez; trocar a métrica
+// não recalcula a agregação, só recomputa as células.
+function buildCompMatrix() {
+  const group = compState.group;
+  const tickets = state.tickets.filter(t => group === 'all' || Number(t.grupo_id) === Number(group));
+  const ticketById = Object.fromEntries(tickets.map(t => [t.id, t]));
+  const ids = new Set(tickets.map(t => t.id));
+  const tecnicos = state.tecnicos.filter(x => ids.has(x.ticket_id));
+  const assigned = assignedTechByTicket(tickets, tecnicos);
+
+  const monthsSet = new Set();
+  const map = {};
+  for (const ticketId in assigned) {
+    const t = ticketById[ticketId];
+    if (!t) continue;
+    const d = parseDate(t.abertura);
+    if (!d) continue;
+    const mk = monthKey(d);
+    monthsSet.add(mk);
+    const x = assigned[ticketId];
+    if (!map[x.tecnico_id]) map[x.tecnico_id] = { nome: x.tecnico, buckets: {} };
+    const rec = map[x.tecnico_id];
+    const b = rec.buckets[mk] || (rec.buckets[mk] = compEmptyBucket());
+    compAccumulate(b, t);
+  }
+  const months = [...monthsSet].sort(); // cronológico (mais antigo → recente)
+  // pré-computa bucket combinado por analista (coluna "Geral" e ordenação)
+  for (const id in map) map[id].geral = compCombine(map[id].buckets);
+  compState._data = { map, months };
+}
+
+function renderCompMonthly() {
+  const data = compState._data;
+  if (!data) return;
+  const { map, months } = data;
+  const metric = compState.metric;
+  const cfg = COMP_METRICS[metric];
+
+  // Ordena analistas por volume total (coluna Geral.total)
+  const sorted = Object.entries(map)
+    .sort((a, b) => b[1].geral.total - a[1].geral.total);
+  compState._sorted = sorted;
+
+  const totalChamados = sorted.reduce((s, [, r]) => s + r.geral.total, 0);
+  $('compCount').textContent = `· ${sorted.length} analistas · ${months.length} meses · ${totalChamados.toLocaleString('pt-BR')} chamados`;
+
+  // Cabeçalho
+  $('compHead').innerHTML = '<tr>' +
+    `<th style="position:sticky;left:0;background:var(--card);z-index:1;">Analista</th>` +
+    months.map(mk => `<th class="num" style="white-space:nowrap;">${monthLabel(mk)}</th>`).join('') +
+    `<th class="num" style="white-space:nowrap;border-left:1px solid var(--border,#2a3a52);">Geral</th>` +
+    '</tr>';
+
+  if (!sorted.length) {
+    $('compBody').innerHTML = `<tr><td colspan="${months.length + 2}" style="text-align:center;color:var(--text-dim);padding:30px;">Nenhum chamado para o filtro selecionado</td></tr>`;
+    if (charts.comp) { charts.comp.destroy(); delete charts.comp; }
+    return;
+  }
+
+  const pctCls = v => v === null ? '' : v >= 90 ? 'sla-ok' : v >= 70 ? 's2' : 'sla-bad';
+  const cellHtml = b => {
+    const v = compValue(b, metric);
+    const txt = compFmt(v, cfg.kind);
+    if (cfg.kind === 'pct') return `<span class="pill ${pctCls(v)}">${txt}</span>`;
+    return txt;
+  };
+
+  $('compBody').innerHTML = sorted.map(([id, rec]) => {
+    const cells = months.map(mk => `<td class="num">${cellHtml(rec.buckets[mk])}</td>`).join('');
+    const geral = `<td class="num" style="border-left:1px solid var(--border,#2a3a52);font-weight:600;">${cellHtml(rec.geral)}</td>`;
+    return `<tr><td style="position:sticky;left:0;background:var(--card);z-index:1;">${escapeHtml(rec.nome)}</td>${cells}${geral}</tr>`;
+  }).join('');
+
+  // Gráfico: top 8 analistas por volume, métrica selecionada ao longo dos meses
+  if (charts.comp) { charts.comp.destroy(); delete charts.comp; }
+  const top = sorted.slice(0, 8);
+  charts.comp = new Chart($('chComp'), {
+    type: 'line',
+    data: {
+      labels: months.map(monthLabel),
+      datasets: top.map(([id, rec], i) => ({
+        label: rec.nome,
+        data: months.map(mk => compValue(rec.buckets[mk], metric)),
+        borderColor: COLORS[i % COLORS.length],
+        backgroundColor: COLORS[i % COLORS.length],
+        spanGaps: true, tension: 0.25, borderWidth: 2, pointRadius: 2,
+      })),
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${compFmt(ctx.raw, cfg.kind)}` } },
+      },
+      scales: {
+        y: { beginAtZero: true, ...(cfg.kind === 'pct' ? { max: 100, ticks: { callback: v => v + '%' } } : {}) },
+      },
+    },
+  });
+}
+
+function exportCompCsv() {
+  const data = compState._data;
+  if (!data || !compState._sorted.length) return;
+  const { months } = data;
+  const metric = compState.metric;
+  const cfg = COMP_METRICS[metric];
+  const raw = v => {
+    if (v === null || v === undefined) return '';
+    const n = cfg.kind === 'int' ? String(Math.round(v))
+      : cfg.kind === 'rating' ? v.toFixed(2)
+      : v.toFixed(1);
+    return n.replace('.', ',');
+  };
+  const esc = v => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const head = ['Analista', ...months.map(monthLabel), 'Geral'];
+  const lines = compState._sorted.map(([id, rec]) => [
+    rec.nome,
+    ...months.map(mk => raw(compValue(rec.buckets[mk], metric))),
+    raw(compValue(rec.geral, metric)),
+  ].map(esc).join(';'));
+  const csv = '﻿' + [`# Métrica: ${cfg.label}`, head.join(';'), ...lines].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `comparativo-mensal-${metric}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // Troca de abas
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   $('tab-overview').style.display = name === 'overview' ? 'block' : 'none';
   $('tab-sla').style.display = name === 'sla' ? 'block' : 'none';
   $('tab-tech').style.display = name === 'tech' ? 'block' : 'none';
-  // (re)inicializa a aba SLA quando fica visível (canvas precisa estar visível p/ dimensionar)
+  $('tab-comp').style.display = name === 'comp' ? 'block' : 'none';
+  // (re)inicializa abas com canvas/tabela quando ficam visíveis
   if (name === 'sla' && state.tickets.length) initSlaTab();
   if (name === 'tech' && state.tickets.length) initTechTab();
+  if (name === 'comp' && state.tickets.length) initCompTab();
 }
 document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 $('slaMonth').addEventListener('change', e => { slaState.month = e.target.value; renderSlaAnalysts(); });
@@ -1610,6 +1883,9 @@ $('slaGroup').addEventListener('change', e => { slaState.group = e.target.value;
 $('techMonth').addEventListener('change', e => { techState.month = e.target.value; renderTechAnalysis(); });
 $('techGroup').addEventListener('change', e => { techState.group = e.target.value; renderTechAnalysis(); });
 $('techExport').addEventListener('click', exportTechCsv);
+$('compMetric').addEventListener('change', e => { compState.metric = e.target.value; renderCompMonthly(); });
+$('compGroup').addEventListener('change', e => { compState.group = e.target.value; buildCompMatrix(); renderCompMonthly(); });
+$('compExport').addEventListener('click', exportCompCsv);
 $('tblTechHead').addEventListener('click', e => {
   const th = e.target.closest('th[data-sort]');
   if (!th) return;
