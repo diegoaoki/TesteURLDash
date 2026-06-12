@@ -146,6 +146,7 @@
     <button type="button" class="tab-btn" data-tab="sla">SLA de Atendimento · Analistas</button>
     <button type="button" class="tab-btn" data-tab="tech">Análise por Técnico</button>
     <button type="button" class="tab-btn" data-tab="comp">Comparativo Mensal</button>
+    <button type="button" class="tab-btn" data-tab="assunto">Assuntos por Contexto</button>
   </nav>
 
   <!-- ===================== ABA: VISÃO GERAL ===================== -->
@@ -489,6 +490,48 @@
 
   </div><!-- /tab-comp -->
 
+  <!-- ===================== ABA: ASSUNTOS POR CONTEXTO ===================== -->
+  <div id="tab-assunto" class="tab-panel" style="display:none;">
+
+    <div class="filters">
+      <div>
+        <label>Mês (abertura)</label>
+        <select id="assuntoMonth"></select>
+      </div>
+      <div>
+        <label>Grupo</label>
+        <select id="assuntoGroup"></select>
+      </div>
+      <div class="spacer"></div>
+      <div>
+        <label>&nbsp;</label>
+        <button type="button" class="refresh-btn" id="assuntoExport" title="Baixar a tabela em CSV">⬇ Exportar CSV</button>
+      </div>
+      <div>
+        <label>Resumo</label>
+        <strong id="assuntoCount" style="font-size: 14px; color: var(--accent);">—</strong>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 18px;">
+      <h2>Assuntos por contexto <span style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;">(top 15 por volume)</span></h2>
+      <div class="chart-wrap tall"><canvas id="chAssunto"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Assuntos por contexto
+        <span style="font-weight:400;color:var(--text-dim);text-transform:none;letter-spacing:0;">(categoria de 1º nível · quantidade e %)</span>
+      </h2>
+      <div class="scroll-y" style="max-height: 560px;">
+        <table>
+          <thead><tr><th>Contexto</th><th class="num">Chamados</th><th class="num">%</th></tr></thead>
+          <tbody id="tblAssunto"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-assunto -->
+
 </main>
 
 <script>
@@ -673,6 +716,7 @@ async function loadAll() {
     if ($('tab-sla').style.display !== 'none') initSlaTab();
     if ($('tab-tech').style.display !== 'none') initTechTab();
     if ($('tab-comp').style.display !== 'none') initCompTab();
+    if ($('tab-assunto').style.display !== 'none') initAssuntoTab();
     setStatus(`✓ ${state.tickets.length} tickets carregados · ${state.groups.length} grupos`, 'ok');
     updateLastUpdate();
   } catch (err) {
@@ -1972,6 +2016,116 @@ function exportCompCsv() {
   URL.revokeObjectURL(url);
 }
 
+// ============================================================================
+// ABA: ASSUNTOS POR CONTEXTO
+// Agrupa os chamados pelo 1º nível da categoria (caminho "Contexto > Sub > Item").
+// Filtros próprios de mês e grupo, ambos com a opção "Todos".
+// ============================================================================
+const assuntoState = { month: 'all', group: 'all', _rows: [] };
+
+function contextoDaCategoria(catId) {
+  const nome = state.categorias[catId || 0];
+  if (!nome) return '(sem categoria)';
+  return nome.split(' > ')[0].trim() || '(sem categoria)';
+}
+
+function initAssuntoTab() {
+  const monthsSet = new Set();
+  state.tickets.forEach(t => { const d = parseDate(t.abertura); if (d) monthsSet.add(monthKey(d)); });
+  const months = [...monthsSet].sort().reverse();
+  const selM = $('assuntoMonth');
+  const prevM = assuntoState.month;
+  selM.innerHTML = '<option value="all">Todos os meses</option>' +
+    months.map(k => `<option value="${k}">${monthLabel(k)}</option>`).join('');
+  assuntoState.month = (prevM === 'all' || months.includes(prevM)) ? prevM : 'all';
+  selM.value = assuntoState.month;
+
+  const groupsWithTickets = new Set(state.tickets.map(t => t.grupo_id));
+  const groups = state.groups.filter(g => groupsWithTickets.has(g.id))
+    .sort((a, b) => (b.total_tickets || 0) - (a.total_tickets || 0));
+  const selG = $('assuntoGroup');
+  const prevG = assuntoState.group;
+  selG.innerHTML = '<option value="all">Todos os grupos</option>' +
+    groups.map(g => `<option value="${g.id}">${escapeHtml(g.nome)}</option>`).join('');
+  assuntoState.group = (prevG === 'all' || groups.some(g => String(g.id) === String(prevG))) ? prevG : 'all';
+  selG.value = String(assuntoState.group);
+
+  renderAssuntos();
+}
+
+function renderAssuntos() {
+  const { month, group } = assuntoState;
+  const tickets = state.tickets.filter(t => {
+    if (group !== 'all' && Number(t.grupo_id) !== Number(group)) return false;
+    if (month !== 'all') { const d = parseDate(t.abertura); if (!d || monthKey(d) !== month) return false; }
+    return true;
+  });
+
+  const map = {};
+  tickets.forEach(t => { const ctx = contextoDaCategoria(t.categoria_id); map[ctx] = (map[ctx] || 0) + 1; });
+  const total = tickets.length;
+  const rows = Object.entries(map)
+    .map(([ctx, qtd]) => ({ ctx, qtd, pct: total ? qtd / total * 100 : 0 }))
+    .sort((a, b) => b.qtd - a.qtd);
+  assuntoState._rows = rows;
+
+  $('assuntoCount').textContent = `· ${rows.length} contextos · ${total.toLocaleString('pt-BR')} chamados`;
+
+  if (!rows.length) {
+    $('tblAssunto').innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-dim);padding:30px;">Nenhum chamado para o filtro selecionado</td></tr>';
+    if (charts.assunto) { charts.assunto.destroy(); delete charts.assunto; }
+    return;
+  }
+
+  $('tblAssunto').innerHTML = rows.map(r => `<tr>
+      <td>${escapeHtml(r.ctx)}</td>
+      <td class="num">${r.qtd.toLocaleString('pt-BR')}</td>
+      <td class="num">${r.pct.toFixed(1)}%</td>
+    </tr>`).join('') +
+    `<tr style="font-weight:700;border-top:2px solid var(--border,#2a3a52);">
+      <td>TOTAL GERAL</td><td class="num">${total.toLocaleString('pt-BR')}</td><td class="num">100%</td>
+    </tr>`;
+
+  // Gráfico: top 15 contextos por volume
+  if (charts.assunto) { charts.assunto.destroy(); delete charts.assunto; }
+  const top = rows.slice(0, 15);
+  charts.assunto = new Chart($('chAssunto'), {
+    type: 'bar',
+    data: {
+      labels: top.map(r => r.ctx),
+      datasets: [{ label: 'Chamados', data: top.map(r => r.qtd),
+        backgroundColor: top.map((_, i) => COLORS[i % COLORS.length]), borderRadius: 4 }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => `${c.raw.toLocaleString('pt-BR')} (${(c.raw / total * 100).toFixed(1)}%)` } },
+      },
+      scales: { x: { beginAtZero: true } },
+    },
+  });
+}
+
+function exportAssuntoCsv() {
+  const rows = assuntoState._rows || [];
+  if (!rows.length) return;
+  const total = rows.reduce((s, r) => s + r.qtd, 0);
+  const esc = v => {
+    const s = (v === null || v === undefined) ? '' : String(v);
+    return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = rows.map(r => [r.ctx, r.qtd, r.pct.toFixed(1).replace('.', ',')].map(esc).join(';'));
+  const csv = '﻿' + ['Contexto;Chamados;%', ...lines, `TOTAL GERAL;${total};100`].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `assuntos-contexto-${assuntoState.month}-${assuntoState.group}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
 // Troca de abas
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
@@ -1979,10 +2133,12 @@ function switchTab(name) {
   $('tab-sla').style.display = name === 'sla' ? 'block' : 'none';
   $('tab-tech').style.display = name === 'tech' ? 'block' : 'none';
   $('tab-comp').style.display = name === 'comp' ? 'block' : 'none';
+  $('tab-assunto').style.display = name === 'assunto' ? 'block' : 'none';
   // (re)inicializa abas com canvas/tabela quando ficam visíveis
   if (name === 'sla' && state.tickets.length) initSlaTab();
   if (name === 'tech' && state.tickets.length) initTechTab();
   if (name === 'comp' && state.tickets.length) initCompTab();
+  if (name === 'assunto' && state.tickets.length) initAssuntoTab();
 }
 document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 $('slaMonth').addEventListener('change', e => { slaState.month = e.target.value; renderSlaAnalysts(); });
@@ -1993,6 +2149,9 @@ $('techExport').addEventListener('click', exportTechCsv);
 $('compMetric').addEventListener('change', e => { compState.metric = e.target.value; renderCompMonthly(); });
 $('compGroup').addEventListener('change', e => { compState.group = e.target.value; buildCompMatrix(); renderCompMonthly(); });
 $('compExport').addEventListener('click', exportCompCsv);
+$('assuntoMonth').addEventListener('change', e => { assuntoState.month = e.target.value; renderAssuntos(); });
+$('assuntoGroup').addEventListener('change', e => { assuntoState.group = e.target.value; renderAssuntos(); });
+$('assuntoExport').addEventListener('click', exportAssuntoCsv);
 $('tblTechHead').addEventListener('click', e => {
   const th = e.target.closest('th[data-sort]');
   if (!th) return;
